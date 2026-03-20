@@ -9,7 +9,7 @@ namespace big
 {
     void esp::draw_bone(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, SDK::FString a, SDK::FString b, Color color)
     {
-        if (!actor) return;
+        if (!actor || !controller) return;
 
         auto a_world = unreal_engine::get_location_bone(actor, a);
         auto b_world = unreal_engine::get_location_bone(actor, b);
@@ -33,7 +33,7 @@ namespace big
     }
     void esp::draw_skeleton(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color const& colour)
     {
-        if (!target) return;
+        if (!target || !controller) return;
 
         for (auto& p : torso)
             draw_bone(target, controller, p.first, p.second, colour);
@@ -131,7 +131,6 @@ namespace big
         float height = static_cast<float>(g_pointers->m_resolution->y / 2);
 
         auto controller = unreal_engine::get_player_controller();
-        auto ch = unreal_engine::get_character();
 
         Color red = { 255, 0, 0, 255 };
         Color blue = { 90, 130, 180, 200 };

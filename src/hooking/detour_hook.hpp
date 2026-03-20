@@ -22,7 +22,11 @@ namespace big
 		{
 			return static_cast<T>(get_original_ptr());
 		}
-
+		template <auto T>
+		static void add(std::string name, void* target)
+		{
+			detour_base::add<T>(new detour_hook(name, target, T));
+		}
 		void fix_hook_address();
 	private:
 		void* m_target;

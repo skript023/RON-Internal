@@ -23,32 +23,57 @@ namespace big
             back_ = buffers_[1];
         }
 
+        /**
+         * @brief Get reference to back buffer for writing.
+         * Must lock externally if multithreaded.
+         */
         container_type& back() noexcept
         {
             return *back_;
         }
 
+        /**
+         * @brief Publish back buffer safely with mutex.
+         */
         void publish() noexcept
         {
-            std::lock_guard lock(m_lock);
+            m_lock.lock();
 
-            // swap pointer
-            std::swap(front_, back_);
+            // swap safely
+            auto temp = front_;
+            front_ = back_;
+            back_ = temp;
+            back_->clear();
 
-            // IMPORTANT: back harus jadi buffer baru (biar gak dipakai render)
-            back_ = std::make_shared<container_type>();
+            m_lock.unlock();
         }
 
+        /**
+         * @brief Get a snapshot of current front buffer.
+         */
         container_ptr view()
         {
-            std::lock_guard lock(m_lock);
-            return front_;
+            m_lock.lock();
+            auto copy = front_; // shared_ptr copy = atomic refcount safe
+            m_lock.unlock();
+            return copy;
+        }
+
+        /**
+         * @brief Clear both buffers safely.
+         */
+        void clear() noexcept
+        {
+            m_lock.lock();
+            front_->clear();
+            back_->clear();
+            m_lock.unlock();
         }
 
     private:
         container_ptr buffers_[2];
         container_ptr front_;
         container_ptr back_;
-        std::mutex m_lock;
+        Mutex m_lock;
     };
 }

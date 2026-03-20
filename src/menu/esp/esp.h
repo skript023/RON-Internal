@@ -20,7 +20,7 @@ namespace big
         std::pair{ L"lowerarm_LE", L"hand_LE" },
     };
 
-    static constexpr std::array<Bones, 5> right_arm = {
+    static constexpr std::array<Bones, 4> right_arm = {
         std::pair{ L"spine_3",     L"clavicle_RI" },
         std::pair{ L"clavicle_RI", L"upperarm_RI" },
         std::pair{ L"upperarm_RI", L"lowerarm_RI" },

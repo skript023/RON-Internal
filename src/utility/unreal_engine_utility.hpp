@@ -223,13 +223,22 @@ namespace big::unreal_engine
 
 	inline SDK::FVector get_location_bone(SDK::AReadyOrNotCharacter* character, SDK::FString const& contain)
 	{
-		if (auto mesh = character->Mesh)
-		{
-			auto name = SDK::UKismetStringLibrary::Conv_StringToName(contain);
+		if (!character)
+			return { 0.f, 0.f, 0.f };
 
-			return mesh->GetSocketLocation(mesh->GetBoneName(mesh->GetBoneIndex(name)));
-		}
-		return { 0.f, 0.f, 0.f };
+		auto mesh = character->Mesh;
+		if (!mesh)
+			return { 0.f, 0.f, 0.f };
+
+		auto name = SDK::UKismetStringLibrary::Conv_StringToName(contain);
+
+		int index = mesh->GetBoneIndex(name);
+		if (index < 0)
+			return { 0.f, 0.f, 0.f }; // ✅ penting
+
+		auto bone_name = mesh->GetBoneName(index);
+
+		return mesh->GetSocketLocation(bone_name);
 	}
 
 	inline SDK::FVector get_location_bone(SDK::ACharacter* character, EBonesIndex idx)

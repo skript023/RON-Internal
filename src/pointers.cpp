@@ -5,7 +5,7 @@ namespace big
 {
 	pointers::pointers(): main_batch("pointer_cache"), steam_batch("steam"), m_resolution(new iVector2(1920, 1080)), m_base_address(memory::module(nullptr).begin().as<uint64_t>())
 	{
-		main_batch.add("Process Event", "40 55 56 57 41 54 41 55 41 56 41 57 48 81 EC F0", [this](memory::handle ptr)
+		main_batch.add("Process Event", "40 55 56 57 41 54 41 55 41 56 41 57 48 81 EC", [this](memory::handle ptr)
 		{
 			m_process_event = ptr.as<decltype(m_process_event)>();
 		});

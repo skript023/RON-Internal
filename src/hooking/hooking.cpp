@@ -15,13 +15,13 @@ namespace big
 #ifdef UNIVERSAL
 	hooking::hooking()
 	{
-		detour_base::add<hooks::swapchain_present>(new detour_hook("SwapChainPresent", graphic_manager::get_method_table(hooks::swapchain_present_index), hooks::swapchain_present));
-		detour_base::add<hooks::swapchain_resizebuffers>(new detour_hook("SwapChainResizeBuffers", graphic_manager::get_method_table(hooks::swapchain_resizebuffers_index), hooks::swapchain_resizebuffers));
+		detour_hook::add<hooks::swapchain_present>("SwapChainPresent", graphic_manager::get_method_table(hooks::swapchain_present_index));
+		detour_hook::add<hooks::swapchain_resizebuffers>("SwapChainResizeBuffers", graphic_manager::get_method_table(hooks::swapchain_resizebuffers_index));
 		
-		detour_base::add<hooks::set_cursor_pos>(new detour_hook("SetCursorPos", memory::module("user32.dll").get_export("SetCursorPos").as<void*>(), hooks::set_cursor_pos));
-		detour_base::add<hooks::convert_thread_to_fiber>(new detour_hook("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>(), hooks::convert_thread_to_fiber));
+		detour_hook::add<hooks::set_cursor_pos>("SetCursorPos", memory::module("user32.dll").get_export("SetCursorPos").as<void*>());
+		detour_hook::add<hooks::convert_thread_to_fiber>("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>());
 
-		detour_base::add<hooks::process_event>(new detour_hook("ProcessEvent", g_pointers->m_process_event, hooks::process_event));
+		detour_hook::add<hooks::process_event>("ProcessEvent", g_pointers->m_process_event);
 
 		g_hooking = this;
 	}
@@ -31,10 +31,10 @@ namespace big
 		m_swapchain_hook.hook(hooks::swapchain_present_index, hooks::swapchain_present);
 		m_swapchain_hook.hook(hooks::swapchain_resizebuffers_index, hooks::swapchain_resizebuffers);
 
-		detour_base::add<hooks::set_cursor_pos>(new detour_hook("SetCursorPos", memory::module("user32.dll").get_export("SetCursorPos").as<void*>(), hooks::set_cursor_pos));
-		detour_base::add<hooks::convert_thread_to_fiber>(new detour_hook("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>(), hooks::convert_thread_to_fiber));
+		detour_hook::add<hooks::set_cursor_pos>("SetCursorPos", memory::module("user32.dll").get_export("SetCursorPos").as<void*>());
+		detour_hook::add<hooks::convert_thread_to_fiber>("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>());
 
-		detour_base::add<hooks::process_event>(new detour_hook("ProcessEvent", reinterpret_cast<void*>(SDK::InSDKUtils::GetImageBase() + SDK::Offsets::ProcessEvent), hooks::process_event));
+		detour_hook::add<hooks::process_event>("ProcessEvent", g_pointers->m_process_event);
 
 		g_hooking = this;
 	}

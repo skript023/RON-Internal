@@ -98,12 +98,6 @@ namespace big
 		{
 			if (key.contains(e.key))
 				return e.value.data();
-
-			if (key.contains("Objective"))
-				return key.data();
-
-			if (key.contains("Trap"))
-				return key.data();
 		}
 
 		return nullptr;
@@ -229,7 +223,7 @@ namespace big
 					actor_data.color = result->color;
 					actor_data.enemy = result->enemy;
 
-					back.push_back(std::move(actor_data));
+					back.push_back(actor_data);
 				}
 			}
 

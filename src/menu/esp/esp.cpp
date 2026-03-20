@@ -109,7 +109,7 @@ namespace big
 
         // pakai SCREEN HEIGHT karena UE pakai VERTICAL FOV
         float radius =
-            tan(aimbot_rad * 0.5f) /
+            tan(aimbot_rad) /
             tan(camera_rad * 0.5f) *
             (screen_h * 0.5f);
 

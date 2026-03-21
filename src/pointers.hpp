@@ -36,6 +36,8 @@ namespace big
 		void* m_eval_script;
 		functions::eval_caller_t m_eval_caller;
 		void* m_return_address;
+		void* m_get_view_point;
+		void* m_get_player_view_point;
 	};
 
 	inline pointers *g_pointers{};

@@ -221,13 +221,21 @@ namespace big::unreal_engine
 		return nullptr;
 	}
 
+	inline bool is_valid_actor(void* actor)
+	{
+		return actor && (uintptr_t)actor > 0x10000;
+	}
+
 	inline SDK::FVector get_location_bone(SDK::AReadyOrNotCharacter* character, SDK::FString const& contain)
 	{
 		if (!character)
 			return { 0.f, 0.f, 0.f };
 
+		if (!is_valid_actor(character))
+			return { 0.f, 0.f, 0.f };
+
 		auto mesh = character->Mesh;
-		if (!mesh)
+		if (!mesh || !is_valid_actor(mesh))
 			return { 0.f, 0.f, 0.f };
 
 		auto name = SDK::UKismetStringLibrary::Conv_StringToName(contain);

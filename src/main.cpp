@@ -36,7 +36,7 @@ DWORD APIENTRY main_thread(LPVOID)
 
 	settings::initialize(g_file_manager.get_project_file("./settings.json"));
 	
-	g_logger.initialize("Quantum", g_file_manager.get_project_file("./FateTrigger.log"), g_settings.debug.external_console);
+	g_logger.initialize("Quantum", g_file_manager.get_project_file("./RON.log"), g_settings.debug.external_console);
 
 	try
 	{
@@ -76,8 +76,6 @@ DWORD APIENTRY main_thread(LPVOID)
 		LOG(INFO) << "Server initialized.";
 
 		g_script_mgr.add_script(std::make_unique<script>(&main_event::run));
-		/*
-		g_script_mgr.add_script(std::make_unique<script>(&entity_event::run));*/
 
 		LOG(INFO) << "Scripts registered.";
 
@@ -87,13 +85,12 @@ DWORD APIENTRY main_thread(LPVOID)
 		initialization_benchmark.get_runtime();
 		initialization_benchmark.reset();
 
-		g_thread_pool->queue_job([] {
+		std::thread([] {
 			TRY_CLAUSE
 			{
 				entity_event::run();
 			} EXCEPT_CLAUSE
-			});
-		//g_thread_pool->queue_job(&main_event::run);
+		}).join();
 
 		while (g_running)
 		{

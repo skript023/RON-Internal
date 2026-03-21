@@ -9,9 +9,21 @@ namespace big::misc
 	}
 
 	template<typename T>
+	inline void clear_bit(T address, int pos)
+	{
+		address &= ~(1 << pos);
+	}
+
+	template<typename T>
 	inline void clear_bits(T* address, int bits)
 	{
 		*address &= ~(bits);
+	}
+
+	template<typename T>
+	inline bool has_bit_set(T value, int pos)
+	{
+		return (value & (static_cast<T>(1) << pos)) != 0;
 	}
 
 	template<typename T>
@@ -24,6 +36,12 @@ namespace big::misc
 	inline bool has_bits_set(T* address, T bits)
 	{
 		return (*address & bits) == bits;
+	}
+
+	template<typename T>
+	inline void set_bit(T address, int pos)
+	{
+		address |= 1 << pos;
 	}
 
 	template<typename T>

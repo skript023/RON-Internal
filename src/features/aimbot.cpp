@@ -240,6 +240,8 @@ namespace big
 
 		eExecutionStatus on_call(SDK::UObject* _this, SDK::UFunction* function, void* parms) override
 		{
+			if (!_silent_mode.get_state()) return eExecutionStatus::EXECUTION_CONTINUE;
+
 			SDK::ABaseMagazineWeapon* gun = static_cast<SDK::ABaseMagazineWeapon*>(_this);
 
 			auto player = static_cast<SDK::AActor*>(unreal_engine::get_character());

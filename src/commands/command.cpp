@@ -2,6 +2,8 @@
 #include "command.hpp"
 #include "commands.hpp"
 
+#include "fiber_pool.hpp"
+
 namespace big
 {
 	command::command(std::string name, std::string label, std::string description, int num_args) :
@@ -16,7 +18,9 @@ namespace big
 
 	void command::call()
 	{
-		on_call();
+		g_fiber_pool->queue_job([this] {
+			on_call();
+		});
 	}
 
 	void command::mark_dirty()

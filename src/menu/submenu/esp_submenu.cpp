@@ -18,56 +18,7 @@ namespace big
             sub->add_option<bool_option<bool>>("draw_skeleton"_hash);
             sub->add_option<bool_option<bool>>("draw_health"_hash);
             sub->add_option<bool_option<bool>>("draw_box"_hash);
-            sub->add_option<bool_option<bool>>("godmode"_hash);
-            sub->add_option<bool_option<bool>>("infinite_ammo"_hash);
-            sub->add_option<bool_option<bool>>("damage"_hash);
-            sub->add_option<bool_option<bool>>("no_recoil"_hash);
-            sub->add_option<bool_option<bool>>("no_spread"_hash);
-            sub->add_option<bool_option<bool>>("penetrate_wall"_hash);
-            sub->add_option<reguler_option>("Add Magazine", nullptr, [] {
-                g_fiber_pool->queue_job([] {
-                    auto c = unreal_engine::get_character();
-                    auto ct = unreal_engine::get_player_controller();
-                    auto wep = c->GetEquippedWeapon();
-
-                    if (!wep)
-                        return;
-
-                    if (!ct->HasAuthority()) return;
-
-                    SDK::FMagazine mag{};
-                    mag.Ammo = 30;
-                    mag.AmmoType = 1;
-                    wep->Server_AddMagazine(mag);
-                });
-            });
-            sub->add_option<reguler_option>("Auto Arrest", nullptr, [] {
-                g_fiber_pool->queue_job([] {
-                    auto world = SDK::UWorld::GetWorld(); if (!world) return;
-                    auto level = world->PersistentLevel; if (!level) return;
-
-                    if (auto actors = level->Actors; actors.Num() > 0)
-
-                    for (size_t i = 0; i < actors.Num(); i++)
-                    {
-                        if (!actors.IsValidIndex(i)) continue;
-
-                        auto actor = actors[i];
-
-                        if (!actor) continue;
-
-                        if (actor->IsA(SDK::AReadyOrNotCharacter::StaticClass()))
-                            if (auto target_pawn = static_cast<SDK::AReadyOrNotCharacter*>(actor))
-                                if (target_pawn->DefaultTeam == SDK::ETeamType::TT_CIVILIAN || target_pawn->DefaultTeam == SDK::ETeamType::TT_SUSPECT)
-                                {
-                                    if (!unreal_engine::get_character()) return;
-
-                                    target_pawn->ArrestComplete(unreal_engine::get_character(), nullptr);
-                                    unreal_engine::get_character()->Server_ReportToTOC(target_pawn, false, false);
-                                }
-                    }
-                });
-            });
+            
             sub->add_option<reguler_option>("Debug Bone", nullptr, [] {
                 g_thread_pool->queue_job([] {
                     auto world = SDK::UWorld::GetWorld(); if (!world) return;

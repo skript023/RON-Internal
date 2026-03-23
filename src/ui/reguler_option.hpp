@@ -1,5 +1,6 @@
 #pragma once
 #include "base_option.hpp"
+#include "commands/commands.hpp"
 
 namespace big
 {
@@ -15,10 +16,24 @@ namespace big
 			set_action(std::move(action));
 		}
 
+		explicit reguler_option(uint32_t cmd): 
+			m_command(commands::get_command<bool_command>(cmd))
+		{
+			auto& text = m_command->get_label();
+			auto& description = m_command->get_description();
+
+			set_left_text(text.c_str());
+			if (!description.empty())
+				set_description(description.c_str());
+			set_action([this] { m_command->call(); });
+		}
+
 		~reguler_option() noexcept = default;
 		reguler_option(reguler_option const&) = default;
 		reguler_option& operator=(reguler_option const&) = default;
 		reguler_option(reguler_option&&) = default;
 		reguler_option& operator=(reguler_option&&) = default;
+
+		command* m_command;
 	};
 }

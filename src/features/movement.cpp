@@ -12,7 +12,7 @@
 
 namespace big
 {
-	static number_command<float> _walk_mult("walk_mult", "Walk Multiplier", "", 240.f, 1000.f, 240.f);
+	static float_command _walk_mult("walk_mult", "Walk Multiplier", "", 1.f, 100.f, 1.f);
 
 	class walk_speed : public looped_command
 	{
@@ -39,9 +39,9 @@ namespace big
 			if (c && controller)
 			{
 				if (controller->HasAuthority())
-					c->Server_SetWalkSpeed(240.0f * _walk_mult.get_state(), 240.0f * _walk_mult.get_state()); // 240 is default walk speed
+					c->Server_SetWalkSpeed(240.0f, 240.0f); // 240 is default walk speed
 				else
-					c->Client_SetWalkSpeed(240.0f * _walk_mult.get_state(), 240.0f * _walk_mult.get_state()); // 240 is default walk speed
+					c->Client_SetWalkSpeed(240.0f, 240.0f); // 240 is default walk speed
 			}
 		}
 	};

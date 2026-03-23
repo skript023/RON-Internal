@@ -69,12 +69,12 @@ namespace big
 
 		float get_min_float() override
 		{
-			return m_min;
+			return m_float_command->get_minimum();
 		}
 
 		float get_max_float() override
 		{
-			return m_max;
+			return m_float_command->get_maximum();
 		}
 
 		void handle_action(OptionAction action) override
@@ -91,8 +91,11 @@ namespace big
 			{
 				if (m_float_command)
 				{
-					if (m_float_command->get_state() - m_step < m_min)
-						m_float_command->set_state(m_max);
+					auto min = m_float_command->get_minimum();
+					auto max = m_float_command->get_maximum();
+
+					if (m_float_command->get_state() - m_step < min)
+						m_float_command->set_state(max);
 					else
 						m_float_command->set_state(m_float_command->get_state() - m_step);
 
@@ -114,8 +117,11 @@ namespace big
 			{
 				if (m_float_command)
 				{
-					if (m_float_command->get_state() + m_step > m_max)
-						m_float_command->set_state(m_min);
+					auto min = m_float_command->get_minimum();
+					auto max = m_float_command->get_maximum();
+
+					if (m_float_command->get_state() + m_step > max)
+						m_float_command->set_state(min);
 					else
 						m_float_command->set_state(m_float_command->get_state() + m_step);
 				}

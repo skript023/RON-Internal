@@ -4,59 +4,45 @@
 
 namespace big
 {
-	using Bones = std::pair<const wchar_t*, const wchar_t*>;
+    struct BonePair { int parent; int child; };
 
-    static constexpr std::array<Bones, 3> torso = {
-        std::pair{ L"Head",     L"neck_1" },
-        std::pair{ L"neck_1",   L"spine_3" },
-        std::pair{ L"spine_3",  L"torso_stabilizer" },
-    };
+    // ========== SUSPECT ==========
+    static constexpr std::array<BonePair, 14> suspect_skel_1 = { {
+        {50,51},{9,50},{8,9},{7,8},
+        {10,11},{11,12},{12,15},
+        {62,63},{63,64},{64,67},
+        {103,104},{104,107},
+        {115,116},{116,119}
+    } };
 
-    static constexpr std::array<Bones, 4> left_arm = {
-        std::pair{ L"spine_3",     L"clavicle_LE" },
-        std::pair{ L"clavicle_LE", L"upperarm_LE" },
-        std::pair{ L"upperarm_LE", L"lowerarm_LE" },
-        // optional:
-        std::pair{ L"lowerarm_LE", L"hand_LE" },
-    };
+    static constexpr std::array<BonePair, 14> suspect_skel_2 = { {
+        {44,45},{5,44},{3,5},{2,3},
+        {6,7},{7,8},{8,11},
+        {49,50},{50,51},{51,54},
+        {111,112},{112,115},
+        {99,100},{100,103}
+    } };
 
-    static constexpr std::array<Bones, 4> right_arm = {
-        std::pair{ L"spine_3",     L"clavicle_RI" },
-        std::pair{ L"clavicle_RI", L"upperarm_RI" },
-        std::pair{ L"upperarm_RI", L"lowerarm_RI" },
-        // optional:
-        std::pair{ L"lowerarm_RI", L"hand_RI" },
-    };
+    // ========== CIVILIAN ==========
+    static constexpr std::array<BonePair, 14> civ_skel_1 = { {
+        {50,51},{9,50},{7,9},{1,7},
+        {10,11},{11,12},{12,15},
+        {62,63},{63,64},{64,67},
+        {103,104},{104,107},
+        {115,116},{116,119}
+    } };
 
-    static constexpr std::array<Bones, 4> left_leg = {
-        std::pair{ L"pelvis",   L"thigh_LE" },
-        std::pair{ L"thigh_LE", L"calf_LE" },
-        std::pair{ L"calf_LE",  L"foot_LE" },
-        std::pair{ L"foot_LE",  L"ball_LE" },
-    };
-
-    static constexpr std::array<Bones, 4> right_leg = {
-        std::pair{ L"pelvis",   L"thigh_RI" },
-        std::pair{ L"thigh_RI", L"calf_RI" },
-        std::pair{ L"calf_RI",  L"foot_RI" },
-        std::pair{ L"foot_RI",  L"ball_RI" },
-    };
+    static constexpr std::array<BonePair, 14> civ_skel_2 = { {
+        {44,45},{5,44},{4,5},{3,4},
+        {6,7},{7,8},{8,11},
+        {49,50},{50,51},{51,54},
+        {111,112},{112,115},
+        {99,100},{100,103}
+    } };
 
 	class esp
 	{
 	public:
-		static void draw_bone(
-			SDK::AReadyOrNotCharacter* mesh,
-			SDK::APlayerController* controller,
-            SDK::FString a,
-            SDK::FString b,
-			Color color
-		);
-		static void draw_skeleton(
-			SDK::AReadyOrNotCharacter* target,
-			SDK::APlayerController* controller,
-			Color const& colour
-		);
 		static void draw_esp();
 	};
 }

@@ -7,12 +7,22 @@
 
 namespace big
 {
-    void esp::draw_bone(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, SDK::FString a, SDK::FString b, Color color)
+    static bool is_skeleton_variant_2(SDK::USkeletalMeshComponent* mesh)
+    {
+        if (!mesh) return false;
+
+        auto name = mesh->GetBoneName(45).ToString();
+        return name == "Head";
+    }
+
+    static void draw_bone(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, int a, int b, Color color)
     {
         if (!actor || !controller) return;
 
-        auto a_world = unreal_engine::get_location_bone(actor, a);
-        auto b_world = unreal_engine::get_location_bone(actor, b);
+        SDK::FVector a_world, b_world;
+
+        if (!unreal_engine::get_bone_world(actor, a, a_world)) return;
+        if (!unreal_engine::get_bone_world(actor, b, b_world)) return;
 
         SDK::FVector2D a_screen, b_screen;
 
@@ -23,32 +33,31 @@ namespace big
             return;
 
         canvas::draw_line(
-            a_screen.X,
-            a_screen.Y,
-            b_screen.X,
-            b_screen.Y,
-            color,
-            1.f
+            a_screen.X, a_screen.Y,
+            b_screen.X, b_screen.Y,
+            color, 1.f
         );
     }
-    void esp::draw_skeleton(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color const& colour)
+    static void draw_skeleton(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color const& colour)
     {
         if (!target || !controller) return;
 
-        for (auto& p : torso)
-            draw_bone(target, controller, p.first, p.second, colour);
+        auto mesh = target->Mesh;
+        if (!mesh) return;
 
-        for (auto& p : left_arm)
-            draw_bone(target, controller, p.first, p.second, colour);
+        bool variant2 = is_skeleton_variant_2(mesh);
 
-        for (auto& p : right_arm)
-            draw_bone(target, controller, p.first, p.second, colour);
+        auto team = target->DefaultTeam;
 
-        for (auto& p : left_leg)
-            draw_bone(target, controller, p.first, p.second, colour);
+        const auto& skeleton =
+            team == SDK::ETeamType::TT_SUSPECT
+            ? (variant2 ? suspect_skel_2 : suspect_skel_1)
+            : (variant2 ? civ_skel_2 : civ_skel_1);
 
-        for (auto& p : right_leg)
-            draw_bone(target, controller, p.first, p.second, colour);
+        for (const auto& [p, c] : skeleton)
+        {
+            draw_bone(target, controller, p, c, colour);
+        }
     }
     static void draw_box3d(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color col)
     {
@@ -135,14 +144,19 @@ namespace big
         float height = static_cast<float>(g_pointers->m_resolution->y / 2);
 
         auto controller = unreal_engine::get_player_controller();
+        auto character = unreal_engine::get_character();
 
         Color red = { 255, 0, 0, 255 };
         Color blue = { 90, 130, 180, 200 };
         Color green = { 90, 160, 120, 200 };
         Color white = { 255, 255, 255, 255 };
 
-        if (!controller)
-			return;
+        if (!controller || !character)
+        {
+            g_esp_data.clear();
+
+            return;
+        }
 
         if (!features::_esp_enabled.get_state())
             return;

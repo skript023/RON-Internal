@@ -243,6 +243,27 @@ namespace big::unreal_engine
 		return mesh->GetSocketLocation(name);
 	}
 
+	static bool get_bone_world(SDK::AReadyOrNotCharacter* character, int index, SDK::FVector& out)
+	{
+		if (!character)
+			return false;
+
+		auto mesh = character->Mesh;
+		if (!mesh) return false;
+
+		auto bone_name = mesh->GetBoneName(index);
+		if (bone_name.IsNone())
+			return false;
+
+		auto transform = mesh->GetBoneTransform(
+			bone_name,
+			SDK::ERelativeTransformSpace::RTS_World
+		);
+
+		out = transform.Translation;
+		return true;
+	}
+
 	inline SDK::FVector get_location_bone(SDK::ACharacter* character, EBonesIndex idx)
 	{
 		if (auto mesh = character->Mesh)

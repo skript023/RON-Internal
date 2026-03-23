@@ -23,6 +23,7 @@ namespace big
             sub->add_option<bool_option<bool>>("damage"_hash);
             sub->add_option<bool_option<bool>>("no_recoil"_hash);
             sub->add_option<bool_option<bool>>("no_spread"_hash);
+            sub->add_option<bool_option<bool>>("penetrate_wall"_hash);
             sub->add_option<reguler_option>("Add Magazine", nullptr, [] {
                 g_fiber_pool->queue_job([] {
                     auto c = unreal_engine::get_character();

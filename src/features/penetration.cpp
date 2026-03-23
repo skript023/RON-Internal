@@ -59,7 +59,7 @@ namespace big
 		g_backup.clear();
 	}
 
-	class no_recoil : public looped_command
+	class penetrate_wall : public looped_command
 	{
 		using looped_command::looped_command;
 
@@ -91,5 +91,5 @@ namespace big
 		}
 	};
 
-	static no_recoil _no_recoil("no_recoil", "No Spread", "");
+	static penetrate_wall _penetrate_wall("penetrate_wall", "Wall Peneration", "");
 }

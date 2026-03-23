@@ -240,13 +240,7 @@ namespace big::unreal_engine
 
 		auto name = SDK::UKismetStringLibrary::Conv_StringToName(contain);
 
-		int index = mesh->GetBoneIndex(name);
-		if (index < 0)
-			return { 0.f, 0.f, 0.f }; // ✅ penting
-
-		auto bone_name = mesh->GetBoneName(index);
-
-		return mesh->GetSocketLocation(bone_name);
+		return mesh->GetSocketLocation(name);
 	}
 
 	inline SDK::FVector get_location_bone(SDK::ACharacter* character, EBonesIndex idx)

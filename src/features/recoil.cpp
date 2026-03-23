@@ -179,5 +179,5 @@ namespace big
 		}
 	};
 
-	static no_recoil _no_recoil("no_recoil", "No Spread", "");
+	static no_recoil _no_recoil("no_recoil", "No Recoil", "");
 }

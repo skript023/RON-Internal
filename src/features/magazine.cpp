@@ -20,6 +20,10 @@ namespace big
         {
             auto c = unreal_engine::get_character();
             auto ct = unreal_engine::get_player_controller();
+
+            if (!ct || !c)
+                return;
+
             auto wep = c->GetEquippedWeapon();
 
             if (!wep)

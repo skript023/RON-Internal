@@ -22,7 +22,7 @@ namespace big
 		{
 			auto controller = unreal_engine::get_player_controller();
 
-			if (auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character()))
+			if (auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character()); c && controller)
 			{
 				if (controller->HasAuthority())
 					c->Server_SetWalkSpeed(240.0f * _walk_mult.get_state(), 240.0f * _walk_mult.get_state()); // 240 is default walk speed
@@ -34,9 +34,8 @@ namespace big
 		void on_disable() override
 		{
 			auto controller = unreal_engine::get_player_controller();
-			auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character());
 
-			if (c && controller)
+			if (auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character()); c && controller)
 			{
 				if (controller->HasAuthority())
 					c->Server_SetWalkSpeed(240.0f, 240.0f); // 240 is default walk speed

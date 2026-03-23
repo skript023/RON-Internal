@@ -36,7 +36,12 @@ namespace big
                         if (auto target_pawn = static_cast<SDK::AReadyOrNotCharacter*>(actor))
                             if (target_pawn->DefaultTeam == SDK::ETeamType::TT_CIVILIAN || target_pawn->DefaultTeam == SDK::ETeamType::TT_SUSPECT)
                             {
-                                if (!unreal_engine::get_character()) return;
+                                if (!unreal_engine::get_character())
+                                {
+                                    LOG(FATAL) << "Player character is null.";
+
+                                    return;
+                                }
 
                                 target_pawn->ArrestComplete(unreal_engine::get_character(), nullptr);
                                 unreal_engine::get_character()->Server_ReportToTOC(target_pawn, false, false);

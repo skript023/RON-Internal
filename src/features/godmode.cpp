@@ -16,24 +16,45 @@ namespace big
 	{
 		using looped_command::looped_command;
 
+		void on_enable() override
+		{
+			auto controller = unreal_engine::get_player_controller();
+			auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character());
+
+			if (c && controller)
+			{
+				misc::set_bit(c->bGodMode, 1);
+
+				if (controller->HasAuthority())
+					c->Server_ToggleGodMode();
+				else
+					c->ToggleGodMode();
+			}
+		}
+
 		void on_tick() override
 		{
 			if (auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character()))
 			{
 				misc::set_bit(c->bGodMode, 1);
-				//c->Server_ToggleGodMode();
 			}
 		}
 
 		void on_disable() override
 		{
-			if (auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character()))
+			auto controller = unreal_engine::get_player_controller();
+			auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character());
+
+			if (c && controller)
 			{
 				if (misc::has_bit_set(c->bGodMode, 1))
 				{
 					misc::clear_bit(c->bGodMode, 1);
-					//c->Server_ToggleGodMode();
 				}
+				if (controller->HasAuthority())
+					c->Server_ToggleGodMode();
+				else
+					c->ToggleGodMode();
 			}
 		}
 	};

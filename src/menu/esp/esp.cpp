@@ -57,10 +57,12 @@ namespace big
         SDK::FVector origin, extent;
         target->GetActorBounds(true, &origin, &extent, false);
 
-        SDK::FVector top = origin + SDK::FVector(0, 0, extent.Z);
-        SDK::FVector bottom = origin - SDK::FVector(0, 0, extent.Z);
+        SDK::FVector top = unreal_engine::get_location_bone(target, L"Head");
+        SDK::FVector bottom = unreal_engine::get_location_bone(target, L"Root");
 
         SDK::FVector2D top2D, bottom2D;
+
+        top.Z += 15.f;
 
         if (!controller->ProjectWorldLocationToScreen(top, &top2D, false))
             return;
@@ -86,8 +88,8 @@ namespace big
 
         auto pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
 
-        float aimbot_fov = fov_cmd->get_state(); // degree
-        float camera_fov = pov.FOV;              // vertical FOV (UE)
+        float aimbot_fov_deg = fov_cmd->get_state(); // degree (ini yang dipakai di acos)
+        float camera_fov_deg = pov.FOV;              // vertical FOV UE
 
         int screen_w, screen_h;
         controller->GetViewportSize(&screen_w, &screen_h);
@@ -96,27 +98,29 @@ namespace big
         float center_y = screen_h * 0.5f;
 
         // ================================
-        // WORLD ANGLE → SCREEN SPACE
+        // CONVERT KE RADIAN
         // ================================
-        // Aimbot check:
-        // acos(dot(view, target)) < fov
+        float aimbot_rad = aimbot_fov_deg * (M_PI / 180.f);
+        float camera_rad = camera_fov_deg * (M_PI / 180.f);
+
+        // ================================
+        // CORE FIX
+        // ================================
+        // Karena:
+        // angle = acos(dot)
+        // → itu FULL ANGLE dari center
         //
-        // Circle harus represent sudut di world space
-        // jadi harus di project pakai camera FOV
+        // Projection ke screen:
+        // radius = tan(angle) / tan(FOV/2) * (screen_h/2)
 
-        float aimbot_rad = aimbot_fov * (M_PI / 180.f);
-        float camera_rad = camera_fov * (M_PI / 180.f);
-
-        // pakai SCREEN HEIGHT karena UE pakai VERTICAL FOV
         float radius =
-            tan(aimbot_rad) /
-            tan(camera_rad * 0.5f) *
+            tanf(aimbot_rad) /
+            tanf(camera_rad * 0.5f) *
             (screen_h * 0.5f);
 
         // ================================
         // DRAW
         // ================================
-
         canvas::draw_circle(
             center_x,
             center_y,

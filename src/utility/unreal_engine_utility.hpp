@@ -189,7 +189,7 @@ namespace big::unreal_engine
 		return std::nullopt;
 	}
 
-	inline SDK::AReadyOrNotCharacter* get_character()
+	inline SDK::APlayerCharacter* get_character()
 	{
 		if (auto player = unreal_engine::get_local_player())
 		{
@@ -197,7 +197,7 @@ namespace big::unreal_engine
 			{
 				if (auto character = pcontroller->Character)
 				{
-					return static_cast<SDK::AReadyOrNotCharacter*>(character);
+					return static_cast<SDK::APlayerCharacter*>(character);
 				}
 			}
 		}

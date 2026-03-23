@@ -25,7 +25,7 @@ namespace big
 		hotkey,
 		max
 	};
-	bool should_trigger_aimbot(SDK::AReadyOrNotCharacter* ch)
+	static bool should_trigger_aimbot(SDK::AReadyOrNotCharacter* ch)
 	{
 		switch ((aimbot_trigger_mode)_aimbot_trigger.get_state())
 		{
@@ -45,19 +45,19 @@ namespace big
 		return false;
 	}
 
-	float normalize_angle(float angle)
+	static float normalize_angle(float angle)
 	{
 		while (angle > 180.f)  angle -= 360.f;
 		while (angle < -180.f) angle += 360.f;
 		return angle;
 	}
 
-	float delta_angle(float current, float target)
+	static float delta_angle(float current, float target)
 	{
 		return normalize_angle(target - current);
 	}
 
-	SDK::FRotator get_aim_rotation(SDK::FVector from, SDK::FVector to)
+	static SDK::FRotator get_aim_rotation(SDK::FVector from, SDK::FVector to)
 	{
 		SDK::FVector dir = (to - from).Normalize();
 
@@ -71,7 +71,7 @@ namespace big
 		return SDK::FRotator(pitch, yaw, 0.f);
 	}
 
-	SDK::FRotator smooth_rotation(SDK::FRotator current, SDK::FRotator target, float smooth, float delta)
+	static SDK::FRotator smooth_rotation(SDK::FRotator current, SDK::FRotator target, float smooth, float delta)
 	{
 		float t = std::clamp(delta * smooth, 0.f, 1.f);
 
@@ -89,7 +89,7 @@ namespace big
 		return result;
 	}
 
-	SDK::FVector get_aim_target(int index, SDK::AReadyOrNotCharacter* target_pawn)
+	static SDK::FVector get_aim_target(int index, SDK::AReadyOrNotCharacter* target_pawn)
 	{
 		auto& targets = g_settings.aimbot.aimbot_targets;
 

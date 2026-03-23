@@ -19,6 +19,27 @@ namespace big
             sub->add_option<bool_option<bool>>("draw_health"_hash);
             sub->add_option<bool_option<bool>>("draw_box"_hash);
             sub->add_option<bool_option<bool>>("godmode"_hash);
+            sub->add_option<bool_option<bool>>("infinite_ammo"_hash);
+            sub->add_option<bool_option<bool>>("damage"_hash);
+            sub->add_option<bool_option<bool>>("no_recoil"_hash);
+            sub->add_option<bool_option<bool>>("no_spread"_hash);
+            sub->add_option<reguler_option>("Add Magazine", nullptr, [] {
+                g_fiber_pool->queue_job([] {
+                    auto c = unreal_engine::get_character();
+                    auto ct = unreal_engine::get_player_controller();
+                    auto wep = c->GetEquippedWeapon();
+
+                    if (!wep)
+                        return;
+
+                    if (!ct->HasAuthority()) return;
+
+                    SDK::FMagazine mag{};
+                    mag.Ammo = 30;
+                    mag.AmmoType = 1;
+                    wep->Server_AddMagazine(mag);
+                });
+            });
             sub->add_option<reguler_option>("Auto Arrest", nullptr, [] {
                 g_fiber_pool->queue_job([] {
                     auto world = SDK::UWorld::GetWorld(); if (!world) return;

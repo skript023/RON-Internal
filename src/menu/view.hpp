@@ -8,7 +8,7 @@ namespace big
 	public:
 		static void register_submenu()
 		{
-			//player_submenu();
+			player_submenu();
 			esp_submenu();
 			aimbot_submenu();
 			setting_submenu();

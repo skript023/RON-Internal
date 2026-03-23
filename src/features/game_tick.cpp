@@ -13,6 +13,15 @@ namespace big::features
 		{
 			g_script_mgr.tick();
 
+			static bool running = false;
+
+			if (!running)
+			{
+				LOG(INFO) << "Tick Running";
+
+				running = true;
+			}
+
 			return eExecutionStatus::EXECUTION_CONTINUE;
 		}
 	};

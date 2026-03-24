@@ -6,7 +6,7 @@ namespace big
 {
     void view::player_submenu()
     {
-        canvas::add_tab<regular_submenu>("Player", SubmenuPlayer, [](regular_submenu* sub)
+        canvas::add_tab<regular_submenu>("Self", SubmenuPlayer, [](regular_submenu* sub)
         {
                 sub->add_option<bool_option<bool>>("godmode"_hash);
                 sub->add_option<bool_option<bool>>("infinite_ammo"_hash);
@@ -17,6 +17,7 @@ namespace big
                 sub->add_option<bool_slider_float_option>("walk_speed"_hash, "walk_mult"_hash);
                 sub->add_option<reguler_option>("add_magazine"_hash);
                 sub->add_option<reguler_option>("auto_arrest"_hash);
+                sub->add_option<reguler_option>("evidance"_hash);
         });
     }
 }

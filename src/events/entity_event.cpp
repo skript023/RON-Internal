@@ -103,6 +103,46 @@ namespace big
 		return nullptr;
 	}
 
+	static const char* find_name(SDK::AActor* actor)
+	{
+		if (auto trap = static_cast<SDK::ATrapActor*>(actor); actor->IsA(SDK::ATrapActor::StaticClass()))
+		{
+			switch (trap->TrapType)
+			{
+			case SDK::ETrapType::Explosive:
+				return "Explosive Trap";
+
+			case SDK::ETrapType::Flashbang:
+				return "FlashBang Trap";
+
+			case SDK::ETrapType::Alarm:
+				return "Alarm Trap";
+
+			case SDK::ETrapType::ToxicGas:
+				return "Gas Trap";
+
+			case SDK::ETrapType::Unknown:
+				return "Unknown Trap";
+
+			case SDK::ETrapType::ETrapType_MAX:
+				return "Invalid Trap";
+
+			default:
+				return "Unknown Trap";
+			}
+		}
+
+		if (auto civilian = static_cast<SDK::ACivilianCharacter*>(actor); actor->IsA(SDK::ACivilianCharacter::StaticClass()))
+		{
+			return "Civilian";
+		}
+
+		if (auto suspect = static_cast<SDK::ASuspectCharacter*>(actor); actor->IsA(SDK::ASuspectCharacter::StaticClass()))
+		{
+			return "Suspect";
+		}
+	}
+
 	static std::optional<esp_result> filter_actor(std::string_view name)
 	{
 		if (auto r = find_name(name, enemy))

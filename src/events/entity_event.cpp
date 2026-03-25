@@ -105,7 +105,7 @@ namespace big
 
 	static std::optional<esp_result> filter_actor(SDK::AActor* actor)
 	{
-		if (auto trap = static_cast<SDK::ATrapActor*>(actor); actor->IsA(SDK::ATrapActor::StaticClass()))
+		if (auto trap = static_cast<SDK::ATrapActor*>(actor); trap && actor->IsA(SDK::ATrapActor::StaticClass()))
 		{
 			switch (trap->TrapType)
 			{
@@ -132,22 +132,22 @@ namespace big
 			}
 		}
 
-		if (auto civilian = static_cast<SDK::ACivilianCharacter*>(actor); actor->IsA(SDK::ACivilianCharacter::StaticClass()))
+		if (auto civilian = static_cast<SDK::ACivilianCharacter*>(actor); civilian && actor->IsA(SDK::ACivilianCharacter::StaticClass()))
 		{
 			return esp_result{ "Civilian", {0, 255, 0, 255}, false};
 		}
 
-		if (auto civilian = static_cast<SDK::ASWATCharacter*>(actor); actor->IsA(SDK::ASWATCharacter::StaticClass()))
+		if (auto swat = static_cast<SDK::ASWATCharacter*>(actor); swat && actor->IsA(SDK::ASWATCharacter::StaticClass()))
 		{
 			return esp_result{ "Swat", {0, 255, 0, 255}, false};
 		}
 
-		if (auto suspect = static_cast<SDK::ASuspectCharacter*>(actor); actor->IsA(SDK::ASuspectCharacter::StaticClass()))
+		if (auto suspect = static_cast<SDK::ASuspectCharacter*>(actor); suspect && actor->IsA(SDK::ASuspectCharacter::StaticClass()))
 		{
 			return esp_result{ "Suspect", {255, 0, 0, 255}, true};
 		}
 
-		if (auto wep = static_cast<SDK::ABaseMagazineWeapon*>(actor); actor->IsA(SDK::ABaseMagazineWeapon::StaticClass()))
+		if (auto wep = static_cast<SDK::ABaseMagazineWeapon*>(actor); wep && actor->IsA(SDK::ABaseMagazineWeapon::StaticClass()))
 		{
 			auto name = wep->GetName();
 			for (const auto& e : weapons)
@@ -157,7 +157,7 @@ namespace big
 			}
 		}
 
-		if (auto obj = static_cast<SDK::AReportableActor*>(actor); actor->IsA(SDK::AReportableActor::StaticClass()))
+		if (auto obj = static_cast<SDK::AReportableActor*>(actor); obj && actor->IsA(SDK::AReportableActor::StaticClass()))
 		{
 			return esp_result{ obj->ReportableName.ToString(), {0, 200, 255, 255}, false };
 		}
@@ -342,7 +342,6 @@ namespace big
 					}
 
 					esp_data actor_data;
-					actor_data.actor = target_pawn;
 					actor_data.location = location;
 					actor_data.screen = screen;
 					actor_data.rotation = actor->K2_GetActorRotation();

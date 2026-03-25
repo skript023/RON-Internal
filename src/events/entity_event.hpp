@@ -24,8 +24,6 @@ namespace big
 	class entity_event
 	{
 	public:
-		static void test();
-		static void registration();
 		static void run();
 	};
 }

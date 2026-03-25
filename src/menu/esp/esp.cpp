@@ -181,7 +181,7 @@ namespace big
                 if (data.actor)
                 {
                     SDK::FVector2D sceen;
-                    auto feet = unreal_engine::get_location_bone(data.actor, L"Root");
+                    auto feet = unreal_engine::get_location_bone(data.actor, EBonesIndex::Root);
 
                     if (!controller->ProjectWorldLocationToScreen(feet, &sceen, false))
                         continue;

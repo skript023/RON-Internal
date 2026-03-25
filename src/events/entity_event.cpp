@@ -141,6 +141,11 @@ namespace big
 		{
 			return "Suspect";
 		}
+
+		if (auto wep = static_cast<SDK::ABaseMagazineWeapon*>(actor); actor->IsA(SDK::ABaseMagazineWeapon::StaticClass()))
+		{
+			return wep->WeaponWheelCategoryName.ToString().c_str();
+		}
 	}
 
 	static std::optional<esp_result> filter_actor(std::string_view name)

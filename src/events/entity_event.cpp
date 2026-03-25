@@ -12,7 +12,7 @@ namespace big
 
 	struct esp_result
 	{
-		const char* label;
+		std::string label;
 		Color color;
 		bool enemy;
 	};
@@ -103,49 +103,66 @@ namespace big
 		return nullptr;
 	}
 
-	static const char* find_name(SDK::AActor* actor)
+	static std::optional<esp_result> filter_actor(SDK::AActor* actor)
 	{
 		if (auto trap = static_cast<SDK::ATrapActor*>(actor); actor->IsA(SDK::ATrapActor::StaticClass()))
 		{
 			switch (trap->TrapType)
 			{
 			case SDK::ETrapType::Explosive:
-				return "Explosive Trap";
+				return esp_result{ "Explosive Trap", {255, 120, 0, 255}, true };
 
 			case SDK::ETrapType::Flashbang:
-				return "FlashBang Trap";
+				return esp_result{ "Flashbang Trap", {255, 120, 0, 255}, true };
 
 			case SDK::ETrapType::Alarm:
-				return "Alarm Trap";
+				return esp_result{ "Alarm Trap", {255, 120, 0, 255}, true };
 
 			case SDK::ETrapType::ToxicGas:
-				return "Gas Trap";
+				return esp_result{ "Gas Trap", {255, 120, 0, 255}, true };
 
 			case SDK::ETrapType::Unknown:
-				return "Unknown Trap";
+				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, true };
 
 			case SDK::ETrapType::ETrapType_MAX:
-				return "Invalid Trap";
+				return esp_result{ "Invalid Trap", {255, 120, 0, 255}, true };
 
 			default:
-				return "Unknown Trap";
+				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, true };
 			}
 		}
 
 		if (auto civilian = static_cast<SDK::ACivilianCharacter*>(actor); actor->IsA(SDK::ACivilianCharacter::StaticClass()))
 		{
-			return "Civilian";
+			return esp_result{ "Civilian", {0, 255, 0, 255}, false};
+		}
+
+		if (auto civilian = static_cast<SDK::ASWATCharacter*>(actor); actor->IsA(SDK::ASWATCharacter::StaticClass()))
+		{
+			return esp_result{ "Swat", {0, 255, 0, 255}, false};
 		}
 
 		if (auto suspect = static_cast<SDK::ASuspectCharacter*>(actor); actor->IsA(SDK::ASuspectCharacter::StaticClass()))
 		{
-			return "Suspect";
+			return esp_result{ "Suspect", {255, 0, 0, 255}, true};
 		}
 
 		if (auto wep = static_cast<SDK::ABaseMagazineWeapon*>(actor); actor->IsA(SDK::ABaseMagazineWeapon::StaticClass()))
 		{
-			return wep->WeaponWheelCategoryName.ToString().c_str();
+			auto name = wep->GetName();
+			for (const auto& e : weapons)
+			{
+				if (name.contains(e.key))
+					return esp_result{ e.value.data(), {255, 255, 0, 255}, false };
+			}
 		}
+
+		if (auto obj = static_cast<SDK::AReportableActor*>(actor); actor->IsA(SDK::AReportableActor::StaticClass()))
+		{
+			return esp_result{ obj->ReportableName.ToString(), {0, 200, 255, 255}, false };
+		}
+
+		return std::nullopt;
 	}
 
 	static std::optional<esp_result> filter_actor(std::string_view name)
@@ -207,6 +224,59 @@ namespace big
 			auto c = unreal_engine::get_player_controller(); if (!c) continue;
 			auto level = world->PersistentLevel; if (!level) continue;
 
+			if (auto gs = world->GameState; gs)
+			{
+				if (auto ron_gs = static_cast<SDK::AReadyOrNotGameState*>(gs))
+				{
+					auto objs = ron_gs->AllReportableActors;
+
+					for (int i = 0; i < objs.Num(); ++i)
+					{
+						if (!objs.IsValidIndex(i)) continue;
+
+						auto obj = objs[i];
+						if (!obj) continue;
+
+						auto location = obj->K2_GetActorLocation();
+
+						float distance = player::get_player_coords()
+							.GetDistanceToInMeters(location);
+
+						SDK::FVector2D screen;
+						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
+							continue;
+
+						// 🔥 STRING AMAN (std::string)
+						auto name = obj->ReportableName.ToString();
+
+						char buffer[128];
+						snprintf(
+							buffer,
+							sizeof(buffer),
+							"%s [%.2f]m",
+							name.c_str(),
+							distance
+						);
+
+						esp_data actor_data;
+						actor_data.actor = nullptr; // bukan pawn
+						actor_data.location = location;
+						actor_data.screen = screen;
+						actor_data.rotation = {};
+						actor_data.display_classname = "Objective";
+						actor_data.display_text = buffer;
+						actor_data.distance = distance;
+						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
+						actor_data.color = obj->bReportableEnabled
+							? Color{ 150,150,150,255 }   // gray
+						: Color{ 0,255,0,255 };      // green
+						actor_data.enemy = false;
+
+						back.push_back(actor_data);
+					}
+				}
+			}
+
 			if (auto actors = level->Actors; actors.Num() > 0)
 			{
 				for (size_t i = 0; i < actors.Num(); i++)
@@ -222,8 +292,8 @@ namespace big
 					float distance = player::get_player_coords().GetDistanceToInMeters(location);
 
 					auto name = actor->GetFullName();
-					//LOG(INFO) << actor->GetName();
-					auto result = filter_actor(actor->GetName());
+
+					auto result = filter_actor(actor);
 
 					if (!result) continue;
 
@@ -247,14 +317,29 @@ namespace big
 					if (!c->ProjectWorldLocationToScreen(location, &screen, true)) continue;
 
 					char buffer[128];
-					snprintf(
-						buffer,
-						sizeof(buffer),
-						"%s [%s] [%.2f]m",
-						result->label,
-						get_status(status),
-						distance
-					);
+
+					if (target_pawn)
+					{
+						snprintf(
+							buffer,
+							sizeof(buffer),
+							"%s [%s] [%.2f]m",
+							result->label.c_str(),
+							get_status(status),
+							distance
+						);
+					}
+					else
+					{
+						snprintf(
+							buffer,
+							sizeof(buffer),
+							"%s [%.2f]m",
+							result->label.c_str(),
+							distance
+						);
+
+					}
 
 					esp_data actor_data;
 					actor_data.actor = target_pawn;

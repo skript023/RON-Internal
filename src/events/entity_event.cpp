@@ -92,6 +92,14 @@ namespace big
 		{ "Objective_Penthouse_LocateLaurie_C", "Laurie" }
 	} };
 
+	static bool is_skeleton_variant_2(SDK::USkeletalMeshComponent* mesh)
+	{
+		if (!mesh) return false;
+
+		auto name = mesh->GetBoneName(45).ToString();
+		return name == "Head";
+	}
+
 	static const char* find_name(std::string_view key, const auto& table)
 	{
 		for (const auto& e : table)
@@ -110,25 +118,25 @@ namespace big
 			switch (trap->TrapType)
 			{
 			case SDK::ETrapType::Explosive:
-				return esp_result{ "Explosive Trap", {255, 120, 0, 255}, true };
+				return esp_result{ "Explosive Trap", {255, 120, 0, 255}, false };
 
 			case SDK::ETrapType::Flashbang:
-				return esp_result{ "Flashbang Trap", {255, 120, 0, 255}, true };
+				return esp_result{ "Flashbang Trap", {255, 120, 0, 255}, false };
 
 			case SDK::ETrapType::Alarm:
-				return esp_result{ "Alarm Trap", {255, 120, 0, 255}, true };
+				return esp_result{ "Alarm Trap", {255, 120, 0, 255}, false };
 
 			case SDK::ETrapType::ToxicGas:
-				return esp_result{ "Gas Trap", {255, 120, 0, 255}, true };
+				return esp_result{ "Gas Trap", {255, 120, 0, 255}, false };
 
 			case SDK::ETrapType::Unknown:
-				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, true };
+				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
 
 			case SDK::ETrapType::ETrapType_MAX:
-				return esp_result{ "Invalid Trap", {255, 120, 0, 255}, true };
+				return esp_result{ "Invalid Trap", {255, 120, 0, 255}, false };
 
 			default:
-				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, true };
+				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
 			}
 		}
 
@@ -212,6 +220,58 @@ namespace big
 		return "None";
 	}
 
+	static bool build_skeleton(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, std::vector<bone_line>& out)
+	{
+		if (!actor || !controller) return false;
+
+		auto mesh = actor->Mesh;
+		if (!mesh) return false;
+
+		bool variant2 = is_skeleton_variant_2(mesh);
+
+		const auto& skeleton =
+			actor->DefaultTeam == SDK::ETeamType::TT_SUSPECT
+			? (variant2 ? suspect_skel_2 : suspect_skel_1)
+			: (variant2 ? civ_skel_2 : civ_skel_1);
+
+		for (auto [a, b] : skeleton)
+		{
+			SDK::FVector wa, wb;
+			if (!unreal_engine::get_bone_world(actor, a, wa)) continue;
+			if (!unreal_engine::get_bone_world(actor, b, wb)) continue;
+
+			SDK::FVector2D sa, sb;
+
+			if (!controller->ProjectWorldLocationToScreen(wa, &sa, true)) continue;
+			if (!controller->ProjectWorldLocationToScreen(wb, &sb, true)) continue;
+
+			out.push_back({ sa, sb });
+		}
+
+		return !out.empty();
+	}
+
+	static bool build_box(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, float& x, float& y, float& w, float& h)
+	{
+		SDK::FVector top = unreal_engine::get_location_bone(actor, L"Head");
+		SDK::FVector bottom = unreal_engine::get_location_bone(actor, L"Root");
+
+		top.Z += 15.f;
+
+		SDK::FVector2D t2d, b2d;
+
+		if (!controller->ProjectWorldLocationToScreen(top, &t2d, true)) return false;
+		if (!controller->ProjectWorldLocationToScreen(bottom, &b2d, true)) return false;
+
+		h = fabs(b2d.Y - t2d.Y);
+		w = h * 0.45f;
+
+		x = b2d.X - w / 2.f;
+		y = t2d.Y;
+
+		return true;
+	}
+
 	void entity_event::run()
 	{
 		LOG(INFO) << "Entity Event Registered";
@@ -288,6 +348,7 @@ namespace big
 					if (!actor) continue;
 
 					auto location = actor->K2_GetActorLocation();
+					auto rotation = actor->K2_GetActorRotation();
 
 					float distance = player::get_player_coords().GetDistanceToInMeters(location);
 
@@ -310,6 +371,8 @@ namespace big
 								if (health)
 									status = health->HealthStatus;
 							}
+
+							location = unreal_engine::get_location_bone(target_pawn, EBonesIndex::Root);
 						}
 					}
 					
@@ -338,19 +401,28 @@ namespace big
 							result->label.c_str(),
 							distance
 						);
-
 					}
 
 					esp_data actor_data;
 					actor_data.location = location;
 					actor_data.screen = screen;
-					actor_data.rotation = actor->K2_GetActorRotation();
+					actor_data.rotation = rotation;
 					actor_data.display_classname = name;
 					actor_data.display_text = buffer;
 					actor_data.distance = distance;
 					actor_data.status = status;
 					actor_data.color = result->color;
 					actor_data.enemy = result->enemy;
+					actor_data.has_skeleton = build_skeleton(target_pawn, c, actor_data.skeleton);
+
+					actor_data.has_box = build_box(
+						target_pawn,
+						c,
+						actor_data.box_x,
+						actor_data.box_y,
+						actor_data.box_w,
+						actor_data.box_h
+					);
 
 					back.push_back(actor_data);
 				}

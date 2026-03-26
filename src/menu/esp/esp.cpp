@@ -40,7 +40,11 @@ namespace big
     }
     static void draw_skeleton(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color const& colour)
     {
-        if (!target || !controller) return;
+        if (!target || !controller)
+        {
+            LOG(FATAL) << "[draw_skeleton] AActor is null 0x" << std::hex << std::uppercase << target << " or APlayerController is null 0x" << std::hex << std::uppercase << controller;
+            return;
+        }
 
         auto mesh = target->Mesh;
         if (!mesh) return;
@@ -61,7 +65,12 @@ namespace big
     }
     static void draw_box3d(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color col)
     {
-        if (!target) return;
+        if (!target || !controller)
+        {
+            LOG(FATAL) << "[draw_box3d] AActor is null 0x" << std::hex << std::uppercase << target << " or APlayerController is null 0x" << std::hex << std::uppercase << controller;
+
+            return;
+        }
 
         SDK::FVector origin, extent;
         target->GetActorBounds(true, &origin, &extent, false);
@@ -151,9 +160,11 @@ namespace big
         Color green = { 90, 160, 120, 200 };
         Color white = { 255, 255, 255, 255 };
 
+        auto& actors = g_esp_data;
+
         if (!controller || !character)
         {
-            g_esp_data.clear();
+            actors.clear();
 
             return;
         }
@@ -161,7 +172,7 @@ namespace big
         if (!features::_esp_enabled.get_state())
             return;
 
-        const auto view = g_esp_data.view();
+        const auto view = actors.view();
 
         if (!view) return;
 
@@ -172,10 +183,17 @@ namespace big
 
             if (features::_draw_line.get_state())
                 canvas::draw_line(width, 0, data.screen.X, data.screen.Y, data.color, 1.f);
-            if (features::_draw_skeleton.get_state())
-                draw_skeleton(data.actor, controller, white);
-            if (features::_draw_box.get_state())
-                draw_box3d(data.actor, controller, white);
+            if (features::_draw_skeleton.get_state() && data.has_skeleton)
+                for (auto& line : data.skeleton)
+                {
+                    canvas::draw_line(
+                        line.a.X, line.a.Y,
+                        line.b.X, line.b.Y,
+                        white, 1.f
+                    );
+                }
+            if (features::_draw_box.get_state() && data.has_box)
+                canvas::draw_corner_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);
             if (features::_draw_name.get_state())
             {
                 if (data.actor)

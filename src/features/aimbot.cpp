@@ -115,10 +115,12 @@ namespace big
 				return;
 
 			// Get current player info
+			auto world = SDK::UWorld::GetWorld();
 			auto ch = unreal_engine::get_character();
 			auto chara_location = player::get_player_forward();
 			auto controller = unreal_engine::get_player_controller();
-			if (!controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch) return;
+			auto level = world->PersistentLevel;
+			if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return;
 
 			auto own_state = controller->AcknowledgedPawn->PlayerState;
 			auto pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
@@ -129,11 +131,13 @@ namespace big
 			// Get player's forward direction from rotation
 			SDK::FVector player_forward = RotationToVector(pov.Rotation);
 
-			if (const auto view = g_esp_data.view(); view)
+			if (auto actors = level->Actors; actors.Num() > 0)
 			{
-				for (const auto& data : *view)
+				for (size_t i = 0; i < actors.Num(); i++)
 				{
-					auto pawn = data.actor;
+					if (!actors.IsValidIndex(i)) continue;
+
+					auto pawn = actors[i];
 
 					if (!pawn) continue;
 
@@ -142,12 +146,18 @@ namespace big
 
 					auto sus = static_cast<SDK::ASuspectCharacter*>(pawn);
 
-					if (!sus || !data.enemy) continue;
+					if (!sus) continue;
 
 					if (!controller->LineOfSightTo(sus, player::get_player_coords(), false))
 						continue;
 
-					if (data.status == SDK::EPlayerHealthStatus::HS_Dead || data.status == SDK::EPlayerHealthStatus::HS_Downed || data.status == SDK::EPlayerHealthStatus::HS_Arrested || data.status == SDK::EPlayerHealthStatus::HS_Incapacitated)
+					auto h = sus->CharacterHealth;
+
+					if (!h) continue;
+
+					auto health = h->HealthStatus;
+
+					if (health == SDK::EPlayerHealthStatus::HS_Dead || health == SDK::EPlayerHealthStatus::HS_Downed || health == SDK::EPlayerHealthStatus::HS_Arrested || health == SDK::EPlayerHealthStatus::HS_Incapacitated)
 						continue;
 
 					auto target = get_aim_target(g_settings.aimbot.aimbot_target, sus);
@@ -249,11 +259,12 @@ namespace big
 			if (gun->Owner == player)
 			{
 				auto params = static_cast<SDK::Params::BaseMagazineWeapon_Server_OnFire*>(parms);
-
+				auto world = SDK::UWorld::GetWorld();
 				auto ch = unreal_engine::get_character();
 				auto chara_location = player::get_player_forward();
 				auto controller = unreal_engine::get_player_controller();
-				if (!controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch) return eExecutionStatus::EXECUTION_CONTINUE;
+				auto level = world->PersistentLevel;
+				if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return eExecutionStatus::EXECUTION_CONTINUE;
 
 				auto own_state = controller->AcknowledgedPawn->PlayerState;
 				auto pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
@@ -264,11 +275,13 @@ namespace big
 				// Get player's forward direction from rotation
 				SDK::FVector player_forward = RotationToVector(pov.Rotation);
 
-				if (const auto view = g_esp_data.view(); view)
+				if (auto actors = level->Actors; actors.Num() > 0)
 				{
-					for (const auto& data : *view)
+					for (size_t i = 0; i < actors.Num(); i++)
 					{
-						auto pawn = data.actor;
+						if (!actors.IsValidIndex(i)) continue;
+
+						auto pawn = actors[i];
 
 						if (!pawn) continue;
 
@@ -277,12 +290,18 @@ namespace big
 
 						auto sus = static_cast<SDK::ASuspectCharacter*>(pawn);
 
-						if (!sus || !data.enemy) continue;
+						if (!sus) continue;
 
 						if (!controller->LineOfSightTo(sus, player::get_player_coords(), false))
 							continue;
 
-						if (data.status == SDK::EPlayerHealthStatus::HS_Dead || data.status == SDK::EPlayerHealthStatus::HS_Downed || data.status == SDK::EPlayerHealthStatus::HS_Arrested || data.status == SDK::EPlayerHealthStatus::HS_Incapacitated)
+						auto h = sus->CharacterHealth;
+
+						if (!h) continue;
+
+						auto health = h->HealthStatus;
+
+						if (health == SDK::EPlayerHealthStatus::HS_Dead || health == SDK::EPlayerHealthStatus::HS_Downed || health == SDK::EPlayerHealthStatus::HS_Arrested || health == SDK::EPlayerHealthStatus::HS_Incapacitated)
 							continue;
 
 						auto target = get_aim_target(g_settings.aimbot.aimbot_target, sus);

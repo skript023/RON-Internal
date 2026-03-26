@@ -28,7 +28,7 @@ namespace big
 	{
 		// low priority
 		ESP,
-		CENSOR,
+		ANIM,
 
 		// medium priority
 		MENU = 0x1000,
@@ -50,6 +50,7 @@ namespace big
 	void gui::init()
 	{
 		this->add_dx_callback(esp::draw_esp, eRenderPriority::ESP);
+		this->add_dx_callback(view::draw_animation, eRenderPriority::ANIM);
 		/*this->add_dx_callback(view::censor, eRenderPriority::CENSOR);
 		this->add_dx_callback(view::draw_overlay, eRenderPriority::INFO_OVERLAY);*/
 		this->add_dx_callback(view::draw_input, eRenderPriority::INPUT);

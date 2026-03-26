@@ -68,6 +68,8 @@ namespace big
 
         bool has_skeleton;
         bool has_box;
+        bool has_box_3d;
+        std::array<SDK::FVector2D, 8> box_3d;
     };
 
 	inline MutexDoubleBuffer<esp_data> g_esp_data;

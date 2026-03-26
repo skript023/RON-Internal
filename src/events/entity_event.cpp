@@ -272,6 +272,37 @@ namespace big
 		return true;
 	}
 
+	static bool build_box_3d(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, std::array<SDK::FVector2D, 8>& out)
+	{
+		if (!actor || !controller)
+			return false;
+
+		SDK::FVector origin, extent;
+		actor->GetActorBounds(true, &origin, &extent, false);
+
+		// 8 corners world
+		SDK::FVector corners[8] = {
+			origin + SDK::FVector(-extent.X, -extent.Y, -extent.Z),
+			origin + SDK::FVector(-extent.X,  extent.Y, -extent.Z),
+			origin + SDK::FVector(extent.X,  extent.Y, -extent.Z),
+			origin + SDK::FVector(extent.X, -extent.Y, -extent.Z),
+
+			origin + SDK::FVector(-extent.X, -extent.Y,  extent.Z),
+			origin + SDK::FVector(-extent.X,  extent.Y,  extent.Z),
+			origin + SDK::FVector(extent.X,  extent.Y,  extent.Z),
+			origin + SDK::FVector(extent.X, -extent.Y,  extent.Z),
+		};
+
+		// W2S
+		for (int i = 0; i < 8; i++)
+		{
+			if (!controller->ProjectWorldLocationToScreen(corners[i], &out[i], true))
+				return false;
+		}
+
+		return true;
+	}
+
 	void entity_event::run()
 	{
 		LOG(INFO) << "Entity Event Registered";
@@ -422,6 +453,8 @@ namespace big
 						actor_data.box_w,
 						actor_data.box_h
 					);
+
+					actor_data.has_box_3d = build_box_3d(target_pawn, c, actor_data.box_3d);
 
 					back.push_back(actor_data);
 				}

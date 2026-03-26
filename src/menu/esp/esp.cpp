@@ -76,7 +76,7 @@ namespace big
         target->GetActorBounds(true, &origin, &extent, false);
 
         SDK::FVector top = unreal_engine::get_location_bone(target, L"Head");
-        SDK::FVector bottom = unreal_engine::get_location_bone(target, L"Root");
+        SDK::FVector bottom = unreal_engine::get_location_bone(target, EBonesIndex::Root);
 
         SDK::FVector2D top2D, bottom2D;
 
@@ -96,7 +96,7 @@ namespace big
 
         canvas::draw_corner_box(x, y, width, height, 1.5f, col);
     }
-    static void draw_aimbot_fov(SDK::APlayerController* controller)
+    static void draw_aimbot_fov(SDK::APlayerController* controller = unreal_engine::get_player_controller())
     {
         if (!controller || !controller->PlayerCameraManager)
             return;
@@ -106,8 +106,8 @@ namespace big
 
         auto pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
 
-        float aimbot_fov_deg = fov_cmd->get_state(); // degree (ini yang dipakai di acos)
-        float camera_fov_deg = pov.FOV;              // vertical FOV UE
+        float aimbot_fov_deg = fov_cmd->get_state();
+        float camera_fov_deg = pov.FOV;
 
         int screen_w, screen_h;
         controller->GetViewportSize(&screen_w, &screen_h);
@@ -115,30 +115,14 @@ namespace big
         float center_x = screen_w * 0.5f;
         float center_y = screen_h * 0.5f;
 
-        // ================================
-        // CONVERT KE RADIAN
-        // ================================
         float aimbot_rad = aimbot_fov_deg * (M_PI / 180.f);
         float camera_rad = camera_fov_deg * (M_PI / 180.f);
-
-        // ================================
-        // CORE FIX
-        // ================================
-        // Karena:
-        // angle = acos(dot)
-        // → itu FULL ANGLE dari center
-        //
-        // Projection ke screen:
-        // radius = tan(angle) / tan(FOV/2) * (screen_h/2)
 
         float radius =
             tanf(aimbot_rad) /
             tanf(camera_rad * 0.5f) *
             (screen_h * 0.5f);
 
-        // ================================
-        // DRAW
-        // ================================
         canvas::draw_circle(
             center_x,
             center_y,
@@ -147,39 +131,56 @@ namespace big
             64
         );
     }
+    static void draw_box_3d(const std::array<SDK::FVector2D, 8>& p, Color col)
+    {
+        auto draw = ImGui::GetForegroundDrawList();
+        auto color = ImGui::ColorConvertFloat4ToU32(ImVec4(
+            col.r / 255.f,
+            col.g / 255.f,
+            col.b / 255.f,
+            col.a / 255.f
+        ));
+
+        auto line = [&](int a, int b)
+            {
+                draw->AddLine({ (float)p[a].X, (float)p[a].Y }, { (float)p[b].X, (float)p[b].Y }, color);
+            };
+
+        // bawah
+        line(0, 1); line(1, 2); line(2, 3); line(3, 0);
+
+        // atas
+        line(4, 5); line(5, 6); line(6, 7); line(7, 4);
+
+        // vertikal
+        line(0, 4); line(1, 5); line(2, 6); line(3, 7);
+    }
     void esp::draw_esp()
 	{
         float width = static_cast<float>(g_pointers->m_resolution->x / 2);
         float height = static_cast<float>(g_pointers->m_resolution->y / 2);
-
-        auto controller = unreal_engine::get_player_controller();
-        auto character = unreal_engine::get_character();
 
         Color red = { 255, 0, 0, 255 };
         Color blue = { 90, 130, 180, 200 };
         Color green = { 90, 160, 120, 200 };
         Color white = { 255, 255, 255, 255 };
 
-        auto& actors = g_esp_data;
+        if (!features::_esp_enabled.get_state())
+            return;
 
-        if (!controller || !character)
+        const auto view = g_esp_data.view();
+
+        if (!view)
         {
-            actors.clear();
+            LOG(FATAL) << "View data is empty";
 
             return;
         }
 
-        if (!features::_esp_enabled.get_state())
-            return;
-
-        const auto view = actors.view();
-
-        if (!view) return;
-
         for (const auto& data : *view)
         {
             if (features::_draw_fov.get_state())
-                draw_aimbot_fov(controller);
+                draw_aimbot_fov();
 
             if (features::_draw_line.get_state())
                 canvas::draw_line(width, 0, data.screen.X, data.screen.Y, data.color, 1.f);
@@ -194,6 +195,8 @@ namespace big
                 }
             if (features::_draw_box.get_state() && data.has_box)
                 canvas::draw_corner_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);
+            if (features::_draw_box_3d.get_state() && data.has_box_3d)
+                draw_box_3d(data.box_3d, data.color);
             if (features::_draw_name.get_state())
             {
                 canvas::draw_stroke_text(data.screen.X, data.screen.Y, data.color, data.display_text);

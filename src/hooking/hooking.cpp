@@ -19,7 +19,7 @@ namespace big
 		detour_hook::add<hooks::swapchain_resizebuffers>("SwapChainResizeBuffers", graphic_manager::get_method_table(hooks::swapchain_resizebuffers_index));
 		
 		detour_hook::add<hooks::set_cursor_pos>("SetCursorPos", memory::module("user32.dll").get_export("SetCursorPos").as<void*>());
-		detour_hook::add<hooks::convert_thread_to_fiber>("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>());
+		//detour_hook::add<hooks::convert_thread_to_fiber>("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>());
 
 		detour_hook::add<hooks::process_event>("ProcessEvent", g_pointers->m_process_event);
 
@@ -32,7 +32,7 @@ namespace big
 		m_swapchain_hook.hook(hooks::swapchain_resizebuffers_index, hooks::swapchain_resizebuffers);
 
 		detour_hook::add<hooks::set_cursor_pos>("SetCursorPos", memory::module("user32.dll").get_export("SetCursorPos").as<void*>());
-		detour_hook::add<hooks::convert_thread_to_fiber>("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>());
+		//detour_hook::add<hooks::convert_thread_to_fiber>("ConvertThreadToFiber", memory::module("kernel32.dll").get_export("ConvertThreadToFiber").as<void*>());
 
 		detour_hook::add<hooks::process_event>("ProcessEvent", g_pointers->m_process_event);
 

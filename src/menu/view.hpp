@@ -19,6 +19,7 @@ namespace big
 		static void draw_input();
 		static void draw_overlay();
 		static void notifications();
+		static void draw_animation();
 	public:
 		static void esp_submenu();
 		static void player_submenu();

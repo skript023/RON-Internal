@@ -9,14 +9,14 @@
 
 namespace big
 {
-	static bool_command _silent_mode("silent_aimbot", "Silent Aimbot", "Silent Aimbot", false);
-	static float_command _aimbot_pitch("aimbot_pitch", "Aimbot Pitch", "Pitch adjustment for aimbot", -99999.0f, 99999.0f, 0.0f);
-	static float_command _aimbot_yaw("aimbot_yaw", "Aimbot Yaw", "Yaw adjustment for aimbot", -99999.0f, 99999.0f, 0.0f);
-	static number_command<int> _aimbot_trigger("aimbot_trigger", "Aimbot Trigger Type", "0=MouseOnly 1=Aiming 2=Hotkey 3=Mouse+Aiming", 0, 3, 0);
-	static number_command<float> _aimbot_fov("aimbot_fov", "Aimbot FOV", "Max aim angle", 1.f, 180.f, 20.f);
-	static number_command<float> _aimbot_smooth("aimbot_smooth", "Aimbot Smooth", "Rotation interpolation", 1.f, 100.f, 10.f );
-	static bool_command _triggerbot("triggerbot", "Triggerbot", "Auto shoot when enemy is in crosshair", false);
-	static number_command<float> _trigger_fov("trigger_fov", "Trigger FOV", "Shoot angle tolerance", 0.1f, 5.f, 1.0f);
+	bool_command _silent_mode("silent_aimbot", "Silent Aimbot", "Silent Aimbot", false);
+	float_command _aimbot_pitch("aimbot_pitch", "Aimbot Pitch", "Pitch adjustment for aimbot", -99999.0f, 99999.0f, 0.0f);
+	float_command _aimbot_yaw("aimbot_yaw", "Aimbot Yaw", "Yaw adjustment for aimbot", -99999.0f, 99999.0f, 0.0f);
+	number_command<int> _aimbot_trigger("aimbot_trigger", "Aimbot Trigger Type", "0=MouseOnly 1=Aiming 2=Hotkey 3=Mouse+Aiming", 0, 3, 0);
+	number_command<float> _aimbot_fov("aimbot_fov", "Aimbot FOV", "Max aim angle", 1.f, 180.f, 20.f);
+	number_command<float> _aimbot_smooth("aimbot_smooth", "Aimbot Smooth", "Rotation interpolation", 1.f, 100.f, 10.f );
+	bool_command _triggerbot("triggerbot", "Triggerbot", "Auto shoot when enemy is in crosshair", false);
+	number_command<float> _trigger_fov("trigger_fov", "Trigger FOV", "Shoot angle tolerance", 0.1f, 5.f, 1.0f);
 
 	enum class aimbot_trigger_mode
 	{

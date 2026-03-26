@@ -13,7 +13,7 @@ namespace big
 		std::queue<state_serializer*> m_late_loaders;
 		bool m_initial_load_done;
 		nlohmann::json m_json;
-		Mutex m_mutex;
+		std::mutex m_mutex;
 
 	public:
 		settings();

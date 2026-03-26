@@ -12,12 +12,13 @@ namespace big
         canvas::add_tab<regular_submenu>("ESP", SubmenuESP, [](regular_submenu* sub)
         {
             sub->add_option<bool_option<bool>>("esp_activate"_hash);
-            sub->add_option<bool_option<bool>>("draw_team"_hash);
+            sub->add_option<bool_option<bool>>("draw_anim"_hash);
             sub->add_option<bool_option<bool>>("draw_line"_hash);
             sub->add_option<bool_option<bool>>("draw_name"_hash);
             sub->add_option<bool_option<bool>>("draw_skeleton"_hash);
             sub->add_option<bool_option<bool>>("draw_health"_hash);
             sub->add_option<bool_option<bool>>("draw_box"_hash);
+            sub->add_option<bool_option<bool>>("draw_box_3d"_hash);
             
             sub->add_option<reguler_option>("Debug Bone", nullptr, [] {
                 g_thread_pool->queue_job([] {

@@ -94,11 +94,11 @@ DWORD APIENTRY main_thread(LPVOID)
 
 		while (g_running)
 		{
-			settings::tick();
 			g_settings.attempt_save();
+			settings::tick();
 			discord_instance->update();
 
-			std::this_thread::sleep_for(1s);
+			std::this_thread::sleep_for(2s);
 		}
 
 		g_script_mgr.remove_all_scripts();

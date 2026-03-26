@@ -319,7 +319,6 @@ namespace big
 						);
 
 						esp_data actor_data;
-						actor_data.actor = nullptr; // bukan pawn
 						actor_data.location = location;
 						actor_data.screen = screen;
 						actor_data.rotation = {};

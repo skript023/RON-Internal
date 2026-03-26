@@ -203,9 +203,34 @@ namespace big
 				// delay supaya gak full auto 1000rpm
 				if (time - last_shot > 0.05f)
 				{
-					mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-					script::get_current()->yield(1s);
-					mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+					if (auto chara = unreal_engine::get_character())
+					{
+						if (auto wep = chara->GetEquippedWeapon())
+						{
+							SDK::FRotator current_rot = pov.Rotation;
+
+							// rotation target dari posisi camera → target bone
+							SDK::FRotator target_rot = get_aim_rotation(
+								pov.Location,
+								aimbot_target
+							);
+
+							// delta time dari world supaya smooth tidak FPS dependent
+							float delta = SDK::UGameplayStatics::GetWorldDeltaSeconds(
+								SDK::UWorld::GetWorld()
+							);
+
+							// interpolation supaya tidak snap
+							SDK::FRotator smoothed = smooth_rotation(
+								current_rot,
+								target_rot,
+								100.f,
+								delta
+							);
+
+							wep->OnFire(smoothed, aimbot_target);
+						}
+					}
 					last_shot = time;
 
 					//LOG(INFO) << "Triggerbot: Shot fired at target with angle " << aimbot_angle * (180.0f / M_PI) << " degrees";
@@ -332,6 +357,50 @@ namespace big
 				}
 
 				float max_fov = _aimbot_fov.get_state() * (M_PI / 180.0f);
+				float trigger_fov = _trigger_fov.get_state() * (M_PI / 180.0f);
+
+				if (_triggerbot.get_state() && aimbot_angle < trigger_fov)
+				{
+					static float last_shot = 0.f;
+
+					float time = SDK::UGameplayStatics::GetRealTimeSeconds(
+						SDK::UWorld::GetWorld()
+					);
+
+					// delay supaya gak full auto 1000rpm
+					if (time - last_shot > 0.05f)
+					{
+						if (auto chara = unreal_engine::get_character())
+						{
+							if (auto wep = chara->GetEquippedWeapon())
+							{
+								SDK::FRotator current_rot = pov.Rotation;
+
+								// rotation target dari posisi camera → target bone
+								SDK::FRotator target_rot = get_aim_rotation(
+									pov.Location,
+									aimbot_target
+								);
+
+								// delta time dari world supaya smooth tidak FPS dependent
+								float delta = SDK::UGameplayStatics::GetWorldDeltaSeconds(
+									SDK::UWorld::GetWorld()
+								);
+
+								// interpolation supaya tidak snap
+								SDK::FRotator smoothed = smooth_rotation(
+									current_rot,
+									target_rot,
+									100.f,
+									delta
+								);
+
+								wep->OnFire(smoothed, aimbot_target);
+							}
+						}
+						last_shot = time;
+					}
+				}
 
 				if (aimbot_angle < max_fov)
 				{

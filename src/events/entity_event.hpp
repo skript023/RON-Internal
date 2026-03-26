@@ -48,7 +48,6 @@ namespace big
 
     struct esp_data
     {
-        SDK::AReadyOrNotCharacter* actor;
         SDK::FVector location;
         SDK::FVector2D screen;
         SDK::FRotator rotation;

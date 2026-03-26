@@ -196,20 +196,7 @@ namespace big
                 canvas::draw_corner_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);
             if (features::_draw_name.get_state())
             {
-                if (data.actor)
-                {
-                    SDK::FVector2D sceen;
-                    auto feet = unreal_engine::get_location_bone(data.actor, EBonesIndex::Root);
-
-                    if (!controller->ProjectWorldLocationToScreen(feet, &sceen, false))
-                        continue;
-
-                    canvas::draw_stroke_text(sceen.X, sceen.Y, data.color, data.display_text);
-                }
-                else
-                {
-                    canvas::draw_stroke_text(data.screen.X, data.screen.Y, data.color, data.display_text);
-                }
+                canvas::draw_stroke_text(data.screen.X, data.screen.Y, data.color, data.display_text);
             }
         }
 	}

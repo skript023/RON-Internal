@@ -739,6 +739,49 @@ namespace big
 		draw_filled_rect_impl(x + w + borderPx, y + h - h / 3 + borderPx * 2, borderPx, h / 3, color);
 	}
 
+	void canvas::draw_box_impl(float x, float y, float w, float h, float thickness, Color color)
+	{
+		auto draw_list = ImGui::GetForegroundDrawList();
+		auto col = ImGui::ColorConvertFloat4ToU32(
+			ImVec4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f)
+		);
+
+		draw_list->AddRect(
+			ImVec2(x, y),
+			ImVec2(x + w, y + h),
+			col,
+			0.0f,       // rounding
+			0,          // flags
+			thickness   // thickness
+		);
+	}
+
+	void canvas::draw_filled_box_impl(float x, float y, float w, float h, Color color)
+	{
+		auto draw_list = ImGui::GetForegroundDrawList();
+		auto col = ImGui::ColorConvertFloat4ToU32(
+			ImVec4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f)
+		);
+
+		draw_list->AddRectFilled(
+			ImVec2(x, y),
+			ImVec2(x + w, y + h),
+			col
+		);
+	}
+
+	void canvas::draw_box_outlined_impl(float x, float y, float w, float h, float thickness, Color color)
+	{
+		// outer (hitam)
+		draw_box_impl(x - 1, y - 1, w + 2, h + 2, thickness, Color(0, 0, 0, 255));
+
+		// main
+		draw_box_impl(x, y, w, h, thickness, color);
+
+		// inner (optional)
+		draw_box_impl(x + 1, y + 1, w - 2, h - 2, thickness, Color(0, 0, 0, 255));
+	}
+
 	void canvas::draw_cube_impl(ImVec2 const& screen_location, float yaw, ImVec2 const& size, Color colour)
 	{
 		auto draw_list = ImGui::GetForegroundDrawList();

@@ -11,6 +11,7 @@ namespace big::features
 	inline bool_command _draw_skeleton("draw_skeleton", "ESP Skeleton", "ESP must be enabled", false);
 	inline bool_command _draw_health("draw_health", "ESP Health Bar", "ESP must be enabled", false);
 	inline bool_command _draw_box("draw_box", "ESP Box", "ESP must be enabled", false);
+	inline bool_command _draw_corner_box("draw_corner_box", "ESP Corner Box", "ESP must be enabled", false);
 	inline bool_command _draw_box_3d("draw_box_3d", "ESP Box 3D", "ESP must be enabled", false);
 	inline bool_command _draw_team("draw_team", "ESP Team", "ESP must be enabled", false);
 	inline bool_command _draw_fov("draw_fov", "Draw FOV", "Draw max aim angle", false);

@@ -193,8 +193,10 @@ namespace big
                         white, 1.f
                     );
                 }
-            if (features::_draw_box.get_state() && data.has_box)
+            if (features::_draw_corner_box.get_state() && data.has_box)
                 canvas::draw_corner_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);
+            if (features::_draw_box.get_state() && data.has_box)
+                canvas::draw_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);
             if (features::_draw_box_3d.get_state() && data.has_box_3d)
                 draw_box_3d(data.box_3d, data.color);
             if (features::_draw_name.get_state())

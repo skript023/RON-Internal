@@ -18,6 +18,7 @@ namespace big
             sub->add_option<bool_option<bool>>("draw_skeleton"_hash);
             sub->add_option<bool_option<bool>>("draw_health"_hash);
             sub->add_option<bool_option<bool>>("draw_box"_hash);
+            sub->add_option<bool_option<bool>>("draw_corner_box"_hash);
             sub->add_option<bool_option<bool>>("draw_box_3d"_hash);
             
             sub->add_option<reguler_option>("Debug Bone", nullptr, [] {

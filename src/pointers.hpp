@@ -32,6 +32,7 @@ namespace big
 		void* m_name{};
 		iVector2* m_resolution{};
 		functions::process_event_t m_process_event{};
+		DWORD* m_tls_idx{};
 	public:
 		void* m_eval_script;
 		functions::eval_caller_t m_eval_caller;

@@ -305,6 +305,12 @@ namespace big
 
 	void entity_event::run()
 	{
+		if (g_pointers->m_tls_idx)
+		{
+			auto value = TlsGetValue(*g_pointers->m_tls_idx);
+			TlsSetValue(*g_pointers->m_tls_idx, value);
+		}
+
 		LOG(INFO) << "Entity Event Registered";
 
 		while (g_running)

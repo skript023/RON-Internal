@@ -43,10 +43,7 @@ namespace big::player
 	{
 		if (auto character = unreal_engine::get_character())
 		{
-			character->K2_TeleportTo(location, rotator);
-			//unreal_engine::get_player_controller()->K2_ClientTravel(L"/Game/Aki/Map/AkiWorld_WP", SDK::ETravelType::TRAVEL_Relative, true);
-			unreal_engine::get_player_controller()->ClientAddTextureStreamingLoc(location, 100.f, true);
-			unreal_engine::get_player_controller()->ClientCommitMapChange();
+			character->Server_TeleportPlayerToLocation(location, SDK::FVector(rotator.Pitch, rotator.Yaw, rotator.Roll));
 		}
 	}
 

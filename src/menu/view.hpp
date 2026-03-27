@@ -24,6 +24,7 @@ namespace big
 		static void esp_submenu();
 		static void player_submenu();
 		static void aimbot_submenu();
+		static void online_players_submenu();
 		static void teleport_submenu();
 		static void setting_submenu();
 	};

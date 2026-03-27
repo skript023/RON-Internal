@@ -34,18 +34,23 @@ namespace big
                     if (actor->IsA(SDK::AReadyOrNotCharacter::StaticClass()))
                     {
                         if (auto target_pawn = static_cast<SDK::AReadyOrNotCharacter*>(actor))
-                            if (target_pawn->DefaultTeam == SDK::ETeamType::TT_CIVILIAN || target_pawn->DefaultTeam == SDK::ETeamType::TT_SUSPECT)
+                        {
+                            if (!target_pawn->IsArrested())
                             {
-                                if (!unreal_engine::get_character())
+                                if (target_pawn->DefaultTeam == SDK::ETeamType::TT_CIVILIAN || target_pawn->DefaultTeam == SDK::ETeamType::TT_SUSPECT)
                                 {
-                                    LOG(FATAL) << "Player character is null.";
+                                    if (!unreal_engine::get_character())
+                                    {
+                                        LOG(FATAL) << "Player character is null.";
 
-                                    return;
+                                        return;
+                                    }
+
+                                    target_pawn->ArrestComplete(unreal_engine::get_character(), nullptr);
+                                    unreal_engine::get_character()->Server_ReportToTOC(target_pawn, false, false);
                                 }
-
-                                target_pawn->ArrestComplete(unreal_engine::get_character(), nullptr);
-                                unreal_engine::get_character()->Server_ReportToTOC(target_pawn, false, false);
                             }
+                        }
                     }
                 }
             }

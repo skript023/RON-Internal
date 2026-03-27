@@ -58,12 +58,12 @@ namespace big
 
                     if (actor->IsA(SDK::ABaseWeapon::StaticClass()))
                     {
-                        SDK::ABaseWeapon* Weapon = reinterpret_cast<SDK::ABaseWeapon*>(actor);
+                        SDK::ABaseWeapon* weapon = reinterpret_cast<SDK::ABaseWeapon*>(actor);
 
                         // Verify both weapon and component are valid
-                        if (Weapon && Weapon->EvidenceComponent && Weapon->EvidenceComponent->CanBeCollected())
+                        if (weapon && weapon->EvidenceComponent && weapon->EvidenceComponent->CanBeCollected())
                         {
-                            weapons.Add(Weapon);
+                            weapons.Add(weapon);
                         }
                     }
                 }
@@ -78,48 +78,48 @@ namespace big
                     player->PickupEvidence(weapons[i]);
             }
 
-            for (SDK::AEvidenceActor* Evidence : game_state->AllEvidenceActors)
+            for (auto evidence : game_state->AllEvidenceActors)
             {
-                if (!Evidence) continue;
-                if (Evidence->EvidenceComponent && Evidence->EvidenceComponent->CanBeCollected())
+                if (!evidence) continue;
+                if (evidence->EvidenceComponent && evidence->EvidenceComponent->CanBeCollected())
                 {
-                    for (SDK::FScoreBonus& Bonus : Evidence->ScoringComponent->ScoringData.Bonuses)
+                    for (auto& bonus : evidence->ScoringComponent->ScoringData.Bonuses)
                     {
-                        Bonus.bEnabled = true;
-                        Bonus.bGiven = true;
-                        Bonus.Score = 10000;
+                        bonus.bEnabled = true;
+                        bonus.bGiven = true;
+                        bonus.Score = 10000;
                     }
-                    for (SDK::FScorePenalty& Penalty : Evidence->ScoringComponent->ScoringData.Penalties)
+                    for (auto& penalty : evidence->ScoringComponent->ScoringData.Penalties)
                     {
-                        Penalty.bEnabled = false;
-                        Penalty.bGiven = false;
-                        Penalty.Score = 0;
+                        penalty.bEnabled = false;
+                        penalty.bGiven = false;
+                        penalty.Score = 0;
                     }
-                    Evidence->OnEvidenceStateChanged(SDK::EEvidenceActorState::Collected);
+                    evidence->OnEvidenceStateChanged(SDK::EEvidenceActorState::Collected);
                 }
             }
 
-            for (SDK::AReportableActor* Actor : game_state->AllReportableActors)
+            for (auto actor : game_state->AllReportableActors)
             {
                 if (auto chara = unreal_engine::get_character())
                 {
-                    chara->Server_ReportToTOC(Actor, false, false);
-                    chara->Server_ReportTarget(Actor);
-                    Actor->InteractableComponent->OnInteract(((SDK::APlayerCharacter*)chara));
+                    chara->Server_ReportToTOC(actor, false, false);
+                    chara->Server_ReportTarget(actor);
+                    actor->InteractableComponent->OnInteract(((SDK::APlayerCharacter*)chara));
                 }
             }
 
-            for (SDK::AObjective* objective : game_state->MissionObjectives)
+            for (auto objective : game_state->MissionObjectives)
             {
                 if (!objective) continue;
-                for (SDK::FScoreBonus& bonus : objective->ScoringComponent->ScoringData.Bonuses)
+                for (auto& bonus : objective->ScoringComponent->ScoringData.Bonuses)
                 {
                     bonus.bEnabled = true;
                     bonus.bGiven = true;
                     bonus.Score = 10000;
 
                 }
-                for (SDK::FScorePenalty& penalty : objective->ScoringComponent->ScoringData.Penalties)
+                for (auto& penalty : objective->ScoringComponent->ScoringData.Penalties)
                 {
                     penalty.bEnabled = false;
                     penalty.bGiven = false;

@@ -40,12 +40,12 @@ namespace big
 
                     if (actor->IsA(SDK::ABaseWeapon::StaticClass()))
                     {
-                        SDK::ABaseWeapon* Weapon = reinterpret_cast<SDK::ABaseWeapon*>(actor);
+                        auto weapon = reinterpret_cast<SDK::ABaseWeapon*>(actor);
 
                         // Verify both weapon and component are valid
-                        if (Weapon && Weapon->EvidenceComponent && Weapon->EvidenceComponent->CanBeCollected())
+                        if (weapon && weapon->EvidenceComponent && weapon->EvidenceComponent->CanBeCollected())
                         {
-                            weapons.Add(Weapon);
+                            weapons.Add(weapon);
                         }
                     }
                 }

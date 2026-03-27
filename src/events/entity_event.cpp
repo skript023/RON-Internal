@@ -167,7 +167,8 @@ namespace big
 
 		if (auto obj = static_cast<SDK::AReportableActor*>(actor); obj && actor->IsA(SDK::AReportableActor::StaticClass()))
 		{
-			return esp_result{ obj->ReportableName.ToString(), {0, 200, 255, 255}, false };
+			Color color = obj->bReportableEnabled ? Color{ 150, 150, 150, 255 } : Color{0, 200, 255, 255};
+			return esp_result{ obj->ReportableName.ToString(), color, false };
 		}
 
 		return std::nullopt;
@@ -309,6 +310,8 @@ namespace big
 		{
 			auto value = TlsGetValue(*g_pointers->m_tls_idx);
 			TlsSetValue(*g_pointers->m_tls_idx, value);
+
+			LOG(INFO) << "TLS set same index as main thread";
 		}
 
 		LOG(INFO) << "Entity Event Registered";
@@ -321,11 +324,15 @@ namespace big
 			auto c = unreal_engine::get_player_controller(); if (!c) continue;
 			auto level = world->PersistentLevel; if (!level) continue;
 
+			//SDK::TArray<SDK::AActor*> tmp;
+			//SDK::UGameplayStatics::GetAllActorsOfClass(world, SDK::AActor::StaticClass(), &tmp);
+
 			if (auto gs = world->GameState; gs)
 			{
 				if (auto ron_gs = static_cast<SDK::AReadyOrNotGameState*>(gs))
 				{
 					auto objs = ron_gs->AllReportableActors;
+					auto missions = ron_gs->MissionObjectives;
 
 					for (int i = 0; i < objs.Num(); ++i)
 					{
@@ -365,7 +372,51 @@ namespace big
 						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
 						actor_data.color = obj->bReportableEnabled
 							? Color{ 150,150,150,255 }   // gray
-						: Color{ 0,255,0,255 };      // green
+						: Color{ 0, 200, 255, 255 };      // green
+						actor_data.enemy = false;
+
+						back.push_back(actor_data);
+					}
+
+					for (size_t i = 0; i < missions.Num(); i++)
+					{
+						if (!objs.IsValidIndex(i)) continue;
+
+						auto obj = objs[i];
+						if (!obj) continue;
+
+						auto location = obj->K2_GetActorLocation();
+
+						float distance = player::get_player_coords()
+							.GetDistanceToInMeters(location);
+
+						SDK::FVector2D screen;
+						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
+							continue;
+
+						// 🔥 STRING AMAN (std::string)
+						auto name = obj->ReportableName.ToString();
+
+						char buffer[128];
+						snprintf(
+							buffer,
+							sizeof(buffer),
+							"%s [%.2f]m",
+							name.c_str(),
+							distance
+						);
+
+						esp_data actor_data;
+						actor_data.location = location;
+						actor_data.screen = screen;
+						actor_data.rotation = {};
+						actor_data.display_classname = "Objective";
+						actor_data.display_text = buffer;
+						actor_data.distance = distance;
+						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
+						actor_data.color = obj->bReportableEnabled
+							? Color{ 150,150,150,255 }   // gray
+						: Color{ 0, 200, 255, 255 };      // green
 						actor_data.enemy = false;
 
 						back.push_back(actor_data);

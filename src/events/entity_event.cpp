@@ -184,10 +184,26 @@ namespace big
 
 		if (actor->IsA(SDK::AReportableActor::StaticClass()))
 		{
-			if (auto obj = static_cast<SDK::AReportableActor*>(actor); obj)
+			if (auto report = static_cast<SDK::AReportableActor*>(actor); report)
 			{
-				Color color = obj->bReportableEnabled ? Color{ 150, 150, 150, 255 } : Color{ 0, 200, 255, 255 };
-				return esp_result{ obj->ReportableName.ToString(), color, false };
+				Color color = report->bReportableEnabled ? Color{ 150, 150, 150, 255 } : Color{ 0, 200, 255, 255 };
+				return esp_result{ report->ReportableName.ToString(), color, false };
+			}
+		}
+
+		if (actor->IsA(SDK::AObjective::StaticClass()))
+		{
+			if (auto obj = static_cast<SDK::AObjective*>(actor); obj)
+			{
+				Color color = Color{ 150, 150, 150, 255 };
+
+				if (obj->IsObjectiveCompleted())
+					color = Color{ 0, 200, 255, 255 };
+
+				if (obj->IsObjectiveFailed())
+					color = Color{ 255, 200, 0, 255 };
+
+				return esp_result{ obj->ObjectiveName.ToString(), color, false };
 			}
 		}
 

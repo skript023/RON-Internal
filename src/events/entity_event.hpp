@@ -50,7 +50,6 @@ namespace big
     {
         SDK::FVector location;
         SDK::FVector2D screen;
-        SDK::FRotator rotation;
         float distance;
         SDK::EPlayerHealthStatus status;
 

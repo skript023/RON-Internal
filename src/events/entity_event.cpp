@@ -113,62 +113,82 @@ namespace big
 
 	static std::optional<esp_result> filter_actor(SDK::AActor* actor)
 	{
-		if (auto trap = static_cast<SDK::ATrapActor*>(actor); trap && actor->IsA(SDK::ATrapActor::StaticClass()))
+		if (!actor) return std::nullopt;
+
+		if (actor->IsA(SDK::ATrapActor::StaticClass()))
 		{
-			switch (trap->TrapType)
+			if (auto trap = static_cast<SDK::ATrapActor*>(actor); trap)
 			{
-			case SDK::ETrapType::Explosive:
-				return esp_result{ "Explosive Trap", {255, 120, 0, 255}, false };
+				switch (trap->TrapType)
+				{
+				case SDK::ETrapType::Explosive:
+					return esp_result{ "Explosive Trap", {255, 120, 0, 255}, false };
 
-			case SDK::ETrapType::Flashbang:
-				return esp_result{ "Flashbang Trap", {255, 120, 0, 255}, false };
+				case SDK::ETrapType::Flashbang:
+					return esp_result{ "Flashbang Trap", {255, 120, 0, 255}, false };
 
-			case SDK::ETrapType::Alarm:
-				return esp_result{ "Alarm Trap", {255, 120, 0, 255}, false };
+				case SDK::ETrapType::Alarm:
+					return esp_result{ "Alarm Trap", {255, 120, 0, 255}, false };
 
-			case SDK::ETrapType::ToxicGas:
-				return esp_result{ "Gas Trap", {255, 120, 0, 255}, false };
+				case SDK::ETrapType::ToxicGas:
+					return esp_result{ "Gas Trap", {255, 120, 0, 255}, false };
 
-			case SDK::ETrapType::Unknown:
-				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
+				case SDK::ETrapType::Unknown:
+					return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
 
-			case SDK::ETrapType::ETrapType_MAX:
-				return esp_result{ "Invalid Trap", {255, 120, 0, 255}, false };
+				case SDK::ETrapType::ETrapType_MAX:
+					return esp_result{ "Invalid Trap", {255, 120, 0, 255}, false };
 
-			default:
-				return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
+				default:
+					return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
+				}
 			}
 		}
 
-		if (auto civilian = static_cast<SDK::ACivilianCharacter*>(actor); civilian && actor->IsA(SDK::ACivilianCharacter::StaticClass()))
+		if (actor->IsA(SDK::ACivilianCharacter::StaticClass()))
 		{
-			return esp_result{ "Civilian", {0, 255, 0, 255}, false};
-		}
-
-		if (auto swat = static_cast<SDK::ASWATCharacter*>(actor); swat && actor->IsA(SDK::ASWATCharacter::StaticClass()))
-		{
-			return esp_result{ "Swat", {0, 255, 0, 255}, false};
-		}
-
-		if (auto suspect = static_cast<SDK::ASuspectCharacter*>(actor); suspect && actor->IsA(SDK::ASuspectCharacter::StaticClass()))
-		{
-			return esp_result{ "Suspect", {255, 0, 0, 255}, true};
-		}
-
-		if (auto wep = static_cast<SDK::ABaseMagazineWeapon*>(actor); wep && actor->IsA(SDK::ABaseMagazineWeapon::StaticClass()))
-		{
-			auto name = wep->GetName();
-			for (const auto& e : weapons)
+			if (auto civilian = static_cast<SDK::ACivilianCharacter*>(actor); civilian)
 			{
-				if (name.contains(e.key))
-					return esp_result{ e.value.data(), {255, 255, 0, 255}, false };
+				return esp_result{ "Civilian", {0, 255, 0, 255}, false };
 			}
 		}
 
-		if (auto obj = static_cast<SDK::AReportableActor*>(actor); obj && actor->IsA(SDK::AReportableActor::StaticClass()))
+		if (actor->IsA(SDK::ASWATCharacter::StaticClass()))
 		{
-			Color color = obj->bReportableEnabled ? Color{ 150, 150, 150, 255 } : Color{0, 200, 255, 255};
-			return esp_result{ obj->ReportableName.ToString(), color, false };
+			if (auto swat = static_cast<SDK::ASWATCharacter*>(actor); swat)
+			{
+				return esp_result{ "Swat", {0, 255, 0, 255}, false };
+			}
+		}
+
+		if (actor->IsA(SDK::ASuspectCharacter::StaticClass()))
+		{
+			if (auto suspect = static_cast<SDK::ASuspectCharacter*>(actor); suspect)
+			{
+				return esp_result{ "Suspect", {255, 0, 0, 255}, true };
+			}
+		}
+
+		if (actor->IsA(SDK::ABaseMagazineWeapon::StaticClass()))
+		{
+			if (auto wep = static_cast<SDK::ABaseMagazineWeapon*>(actor); wep)
+			{
+				auto name = wep->GetName();
+				for (const auto& e : weapons)
+				{
+					if (name.contains(e.key))
+						return esp_result{ e.value.data(), {255, 255, 0, 255}, false };
+				}
+			}
+		}
+
+		if (actor->IsA(SDK::AReportableActor::StaticClass()))
+		{
+			if (auto obj = static_cast<SDK::AReportableActor*>(actor); obj)
+			{
+				Color color = obj->bReportableEnabled ? Color{ 150, 150, 150, 255 } : Color{ 0, 200, 255, 255 };
+				return esp_result{ obj->ReportableName.ToString(), color, false };
+			}
 		}
 
 		return std::nullopt;
@@ -324,9 +344,6 @@ namespace big
 			auto c = unreal_engine::get_player_controller(); if (!c) continue;
 			auto level = world->PersistentLevel; if (!level) continue;
 
-			//SDK::TArray<SDK::AActor*> tmp;
-			//SDK::UGameplayStatics::GetAllActorsOfClass(world, SDK::AActor::StaticClass(), &tmp);
-
 			if (auto gs = world->GameState; gs)
 			{
 				if (auto ron_gs = static_cast<SDK::AReadyOrNotGameState*>(gs))
@@ -365,7 +382,6 @@ namespace big
 						esp_data actor_data;
 						actor_data.location = location;
 						actor_data.screen = screen;
-						actor_data.rotation = {};
 						actor_data.display_classname = "Objective";
 						actor_data.display_text = buffer;
 						actor_data.distance = distance;
@@ -380,12 +396,14 @@ namespace big
 
 					for (size_t i = 0; i < missions.Num(); i++)
 					{
-						if (!objs.IsValidIndex(i)) continue;
+						if (!missions.IsValidIndex(i)) continue;
 
-						auto obj = objs[i];
-						if (!obj) continue;
+						auto mission = missions[i];
+						if (!mission) continue;
 
-						auto location = obj->K2_GetActorLocation();
+						auto result = filter_actor(mission);
+
+						auto location = mission->K2_GetActorLocation();
 
 						float distance = player::get_player_coords()
 							.GetDistanceToInMeters(location);
@@ -394,29 +412,23 @@ namespace big
 						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
 							continue;
 
-						// 🔥 STRING AMAN (std::string)
-						auto name = obj->ReportableName.ToString();
-
 						char buffer[128];
 						snprintf(
 							buffer,
 							sizeof(buffer),
 							"%s [%.2f]m",
-							name.c_str(),
+							result->label.c_str(),
 							distance
 						);
 
 						esp_data actor_data;
 						actor_data.location = location;
 						actor_data.screen = screen;
-						actor_data.rotation = {};
 						actor_data.display_classname = "Objective";
 						actor_data.display_text = buffer;
 						actor_data.distance = distance;
 						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
-						actor_data.color = obj->bReportableEnabled
-							? Color{ 150,150,150,255 }   // gray
-						: Color{ 0, 200, 255, 255 };      // green
+						actor_data.color = result->color;
 						actor_data.enemy = false;
 
 						back.push_back(actor_data);
@@ -432,18 +444,17 @@ namespace big
 
 					auto actor = actors[i];
 
-					if (!actor) continue;
-
-					auto location = actor->K2_GetActorLocation();
-					auto rotation = actor->K2_GetActorRotation();
-
-					float distance = player::get_player_coords().GetDistanceToInMeters(location);
-
-					auto name = actor->GetFullName();
+					if (!actor || (uintptr_t)actor < 0x10000) continue;
 
 					auto result = filter_actor(actor);
 
 					if (!result) continue;
+
+					auto location = actor->K2_GetActorLocation();
+
+					float distance = player::get_player_coords().GetDistanceToInMeters(location);
+
+					auto name = actor->GetFullName();
 
 					SDK::AReadyOrNotCharacter* target_pawn = nullptr;
 
@@ -464,7 +475,7 @@ namespace big
 					}
 					
 					SDK::FVector2D screen;
-					if (!c->ProjectWorldLocationToScreen(location, &screen, true)) continue;
+					if (!c->ProjectWorldLocationToScreen(location, &screen, false)) continue;
 
 					char buffer[128];
 
@@ -493,7 +504,6 @@ namespace big
 					esp_data actor_data;
 					actor_data.location = location;
 					actor_data.screen = screen;
-					actor_data.rotation = rotation;
 					actor_data.display_classname = name;
 					actor_data.display_text = buffer;
 					actor_data.distance = distance;

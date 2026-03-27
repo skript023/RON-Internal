@@ -11,6 +11,7 @@ namespace big
 			player_submenu();
 			esp_submenu();
 			aimbot_submenu();
+			online_players_submenu();
 			setting_submenu();
 		}
 	public:

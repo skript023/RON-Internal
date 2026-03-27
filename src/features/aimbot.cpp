@@ -361,45 +361,9 @@ namespace big
 
 				if (_triggerbot.get_state() && aimbot_angle < trigger_fov)
 				{
-					static float last_shot = 0.f;
+					params->SpawnLoc = aimbot_target;
 
-					float time = SDK::UGameplayStatics::GetRealTimeSeconds(
-						SDK::UWorld::GetWorld()
-					);
-
-					// delay supaya gak full auto 1000rpm
-					if (time - last_shot > 0.05f)
-					{
-						if (auto chara = unreal_engine::get_character())
-						{
-							if (auto wep = chara->GetEquippedWeapon())
-							{
-								SDK::FRotator current_rot = pov.Rotation;
-
-								// rotation target dari posisi camera → target bone
-								SDK::FRotator target_rot = get_aim_rotation(
-									pov.Location,
-									aimbot_target
-								);
-
-								// delta time dari world supaya smooth tidak FPS dependent
-								float delta = SDK::UGameplayStatics::GetWorldDeltaSeconds(
-									SDK::UWorld::GetWorld()
-								);
-
-								// interpolation supaya tidak snap
-								SDK::FRotator smoothed = smooth_rotation(
-									current_rot,
-									target_rot,
-									100.f,
-									delta
-								);
-
-								wep->OnFire(smoothed, aimbot_target);
-							}
-						}
-						last_shot = time;
-					}
+					this->intercept(_this, function, params);
 				}
 
 				if (aimbot_angle < max_fov)

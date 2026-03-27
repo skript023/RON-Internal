@@ -14,7 +14,7 @@ namespace big
 			{
 				auto& players = gs->AllPlayerCharacters;
 
-				for (size_t i = 0; i < players.Num(); i++)
+				for (int i = 0; i < players.Num(); i++)
 				{
 					if (!players.IsValidIndex(i)) continue;
 
@@ -24,7 +24,17 @@ namespace big
 
 					auto ps = player->PlayerState;
 
-					sub->add_option<sub_option>(ps->GetPlayerName().ToString().c_str(), nullptr, "SubmenuSelectedPlayer"_hash);
+					char buffer[1024];
+
+					snprintf(
+						buffer,
+						sizeof(buffer),
+						"[%i] %s",
+						i,
+						ps->GetPlayerName().ToString().c_str()
+					);
+
+					sub->add_option<sub_option>(buffer, nullptr, "SubmenuSelectedPlayer"_hash);
 				}
 			}
 		});

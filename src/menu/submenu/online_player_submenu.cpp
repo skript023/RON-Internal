@@ -30,7 +30,7 @@ namespace big
 						buffer,
 						sizeof(buffer),
 						"[%i] %s",
-						i,
+						i + 1,
 						ps->GetPlayerName().ToString().c_str()
 					);
 

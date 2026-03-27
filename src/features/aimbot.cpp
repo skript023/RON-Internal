@@ -111,9 +111,6 @@ namespace big
 
 		virtual void on_tick() override
 		{
-			if (_silent_mode.get_state())
-				return;
-
 			// Get current player info
 			auto world = SDK::UWorld::GetWorld();
 			auto ch = unreal_engine::get_character();
@@ -237,32 +234,35 @@ namespace big
 				}
 			}
 
-			// hanya aim kalau target masih dalam FOV legit
-			if (aimbot_angle < max_fov && should_trigger_aimbot(ch))
+			if (!_silent_mode.get_state())
 			{
-				SDK::FRotator current_rot = pov.Rotation;
+				// hanya aim kalau target masih dalam FOV legit
+				if (aimbot_angle < max_fov && should_trigger_aimbot(ch))
+				{
+					SDK::FRotator current_rot = pov.Rotation;
 
-				// rotation target dari posisi camera → target bone
-				SDK::FRotator target_rot = get_aim_rotation(
-					pov.Location,
-					aimbot_target
-				);
+					// rotation target dari posisi camera → target bone
+					SDK::FRotator target_rot = get_aim_rotation(
+						pov.Location,
+						aimbot_target
+					);
 
-				// delta time dari world supaya smooth tidak FPS dependent
-				float delta = SDK::UGameplayStatics::GetWorldDeltaSeconds(
-					SDK::UWorld::GetWorld()
-				);
+					// delta time dari world supaya smooth tidak FPS dependent
+					float delta = SDK::UGameplayStatics::GetWorldDeltaSeconds(
+						SDK::UWorld::GetWorld()
+					);
 
-				// interpolation supaya tidak snap
-				SDK::FRotator smoothed = smooth_rotation(
-					current_rot,
-					target_rot,
-					_aimbot_smooth.get_state(),
-					delta
-				);
+					// interpolation supaya tidak snap
+					SDK::FRotator smoothed = smooth_rotation(
+						current_rot,
+						target_rot,
+						_aimbot_smooth.get_state(),
+						delta
+					);
 
-				// apply hasil smooth rotation
-				controller->SetControlRotation(smoothed);
+					// apply hasil smooth rotation
+					controller->SetControlRotation(smoothed);
+				}
 			}
 
 			g_should_trigger = false;
@@ -357,14 +357,6 @@ namespace big
 				}
 
 				float max_fov = _aimbot_fov.get_state() * (M_PI / 180.0f);
-				float trigger_fov = _trigger_fov.get_state() * (M_PI / 180.0f);
-
-				if (_triggerbot.get_state() && aimbot_angle < trigger_fov)
-				{
-					params->SpawnLoc = aimbot_target;
-
-					this->intercept(_this, function, params);
-				}
 
 				if (aimbot_angle < max_fov)
 				{

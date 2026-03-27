@@ -19,7 +19,7 @@ namespace big
 		void on_enable() override
 		{
 			auto controller = unreal_engine::get_player_controller();
-			auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character());
+			auto c = unreal_engine::get_character();
 
 			if (c && controller)
 			{
@@ -34,7 +34,7 @@ namespace big
 
 		void on_tick() override
 		{
-			if (auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character()))
+			if (auto c = unreal_engine::get_character())
 			{
 				misc::set_bit(c->bGodMode, 1);
 			}
@@ -43,7 +43,7 @@ namespace big
 		void on_disable() override
 		{
 			auto controller = unreal_engine::get_player_controller();
-			auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character());
+			auto c = unreal_engine::get_character();
 
 			if (c && controller)
 			{

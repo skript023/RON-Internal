@@ -383,7 +383,6 @@ namespace big
 						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
 							continue;
 
-						// 🔥 STRING AMAN (std::string)
 						auto name = obj->ReportableName.ToString();
 
 						char buffer[128];
@@ -398,13 +397,13 @@ namespace big
 						esp_data actor_data;
 						actor_data.location = location;
 						actor_data.screen = screen;
-						actor_data.display_classname = "Objective";
+						actor_data.display_classname = "Reportable";
 						actor_data.display_text = buffer;
 						actor_data.distance = distance;
 						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
 						actor_data.color = obj->bReportableEnabled
-							? Color{ 150,150,150,255 }   // gray
-						: Color{ 0, 200, 255, 255 };      // green
+							? Color{ 150,150,150,255 }
+						: Color{ 0, 200, 255, 255 };
 						actor_data.enemy = false;
 
 						back.push_back(actor_data);

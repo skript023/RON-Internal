@@ -160,10 +160,10 @@ namespace big
         float width = static_cast<float>(g_pointers->m_resolution->x / 2);
         float height = static_cast<float>(g_pointers->m_resolution->y / 2);
 
-        Color red = { 255, 0, 0, 255 };
-        Color blue = { 90, 130, 180, 200 };
-        Color green = { 90, 160, 120, 200 };
-        Color white = { 255, 255, 255, 255 };
+        static const Color white = { 255, 255, 255, 255 };
+
+        if (features::_draw_fov.get_state())
+            draw_aimbot_fov();
 
         if (!features::_esp_enabled.get_state())
             return;
@@ -179,20 +179,15 @@ namespace big
 
         for (const auto& data : *view)
         {
-            if (features::_draw_fov.get_state())
-                draw_aimbot_fov();
-
             if (features::_draw_line.get_state())
                 canvas::draw_line(width, 0, data.screen.X, data.screen.Y, data.color, 1.f);
             if (features::_draw_skeleton.get_state() && data.has_skeleton)
+            {
                 for (auto& line : data.skeleton)
                 {
-                    canvas::draw_line(
-                        line.a.X, line.a.Y,
-                        line.b.X, line.b.Y,
-                        white, 1.f
-                    );
+                    canvas::draw_line(line.a.X, line.a.Y, line.b.X, line.b.Y, white, 1.f);
                 }
+            }
             if (features::_draw_corner_box.get_state() && data.has_box)
                 canvas::draw_corner_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);
             if (features::_draw_box.get_state() && data.has_box)

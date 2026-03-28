@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include <imgui.h>
 
+#define UNIVERSAL
+
 namespace big
 {
 	class renderer

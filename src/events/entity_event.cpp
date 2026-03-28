@@ -360,7 +360,10 @@ namespace big
 			auto c = unreal_engine::get_player_controller(); if (!c) continue;
 			auto level = world->PersistentLevel; if (!level) continue;
 
-			if (auto gs = world->GameState; gs)
+			SDK::TArray<SDK::AActor*> tmp;
+			SDK::UGameplayStatics::GetAllActorsOfClass(world, SDK::AActor::StaticClass(), &tmp);
+
+			/*if (auto gs = world->GameState; gs)
 			{
 				if (auto ron_gs = static_cast<SDK::AReadyOrNotGameState*>(gs))
 				{
@@ -416,8 +419,6 @@ namespace big
 						auto mission = missions[i];
 						if (!mission) continue;
 
-						auto result = filter_actor(mission);
-
 						auto location = mission->K2_GetActorLocation();
 
 						float distance = player::get_player_coords()
@@ -427,14 +428,25 @@ namespace big
 						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
 							continue;
 
+
+						auto name = mission->ObjectiveName.ToString();
+
 						char buffer[128];
 						snprintf(
 							buffer,
 							sizeof(buffer),
 							"%s [%.2f]m",
-							result->label.c_str(),
+							name.c_str(),
 							distance
 						);
+
+						Color color = Color{ 150, 150, 150, 255 };
+
+						if (mission->IsObjectiveCompleted())
+							color = Color{ 0, 200, 255, 255 };
+
+						if (mission->IsObjectiveFailed())
+							color = Color{ 255, 200, 0, 255 };
 
 						esp_data actor_data;
 						actor_data.location = location;
@@ -443,15 +455,15 @@ namespace big
 						actor_data.display_text = buffer;
 						actor_data.distance = distance;
 						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
-						actor_data.color = result->color;
+						actor_data.color = color;
 						actor_data.enemy = false;
 
 						back.push_back(actor_data);
 					}
 				}
-			}
+			}*/
 
-			if (auto actors = level->Actors; actors.Num() > 0)
+			if (auto actors = tmp; actors.Num() > 0)
 			{
 				for (size_t i = 0; i < actors.Num(); i++)
 				{

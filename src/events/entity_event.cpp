@@ -354,13 +354,13 @@ namespace big
 
 		while (g_running)
 		{
-			if (!g_should_trigger) continue;
+			if (!g_should_trigger) goto end;
 
 			auto& back = g_esp_data.back(); back.clear();
-			auto world = SDK::UWorld::GetWorld(); if (!world) continue;
-			auto ch = unreal_engine::get_character(); if (!ch) continue;
-			auto c = unreal_engine::get_player_controller(); if (!c) continue;
-			auto level = world->PersistentLevel; if (!level) continue;
+			auto world = SDK::UWorld::GetWorld(); if (!world) goto end;
+			auto ch = unreal_engine::get_character(); if (!ch) goto end;
+			auto c = unreal_engine::get_player_controller(); if (!c) goto end;
+			auto level = world->PersistentLevel; if (!level) goto end;
 
 			if (auto gs = world->GameState; gs)
 			{
@@ -371,10 +371,10 @@ namespace big
 
 					for (int i = 0; i < objs.Num(); ++i)
 					{
-						if (!objs.IsValidIndex(i)) continue;
+						if (!objs.IsValidIndex(i)) goto end;
 
 						auto obj = objs[i];
-						if (!obj) continue;
+						if (!obj) goto end;
 
 						auto location = obj->K2_GetActorLocation();
 
@@ -383,7 +383,7 @@ namespace big
 
 						SDK::FVector2D screen;
 						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
-							continue;
+							goto end;
 
 						auto name = obj->ReportableName.ToString();
 
@@ -556,6 +556,7 @@ namespace big
 			g_esp_data.publish();
 		}
 
+	end:
 		std::this_thread::sleep_for(30ms);
 	}
 }

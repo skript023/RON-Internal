@@ -354,16 +354,15 @@ namespace big
 
 		while (g_running)
 		{
+			if (!g_should_trigger) continue;
+
 			auto& back = g_esp_data.back(); back.clear();
 			auto world = SDK::UWorld::GetWorld(); if (!world) continue;
 			auto ch = unreal_engine::get_character(); if (!ch) continue;
 			auto c = unreal_engine::get_player_controller(); if (!c) continue;
 			auto level = world->PersistentLevel; if (!level) continue;
 
-			SDK::TArray<SDK::AActor*> tmp;
-			SDK::UGameplayStatics::GetAllActorsOfClass(world, SDK::AActor::StaticClass(), &tmp);
-
-			/*if (auto gs = world->GameState; gs)
+			if (auto gs = world->GameState; gs)
 			{
 				if (auto ron_gs = static_cast<SDK::AReadyOrNotGameState*>(gs))
 				{
@@ -461,9 +460,9 @@ namespace big
 						back.push_back(actor_data);
 					}
 				}
-			}*/
+			}
 
-			if (auto actors = tmp; actors.Num() > 0)
+			if (auto actors = level->Actors; actors.Num() > 0)
 			{
 				for (size_t i = 0; i < actors.Num(); i++)
 				{

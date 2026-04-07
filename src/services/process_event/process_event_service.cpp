@@ -20,6 +20,8 @@ namespace big
 
 		auto func = joaat(name);
 
+		g_should_trigger.store(func == "Function Engine.ActorComponent.ReceiveTick"_hash);
+
 		if (auto command = commands::get_process_event(func); command)
 		{
 			if (auto status = command->call(_this, function, parms); status == eExecutionStatus::EXECUTION_INTERCEPTED)

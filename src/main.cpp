@@ -76,6 +76,7 @@ DWORD APIENTRY main_thread(LPVOID)
 		LOG(INFO) << "Server initialized.";
 
 		g_script_mgr.add_script(std::make_unique<script>(&main_event::run));
+		//g_script_mgr.add_script(std::make_unique<script>(&entity_event::run));
 
 		LOG(INFO) << "Scripts registered.";
 

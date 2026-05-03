@@ -354,8 +354,6 @@ namespace big
 
 		while (g_running)
 		{
-			if (!g_should_trigger) goto end;
-
 			auto& back = g_esp_data.back(); back.clear();
 			auto world = SDK::UWorld::GetWorld(); if (!world) goto end;
 			auto ch = unreal_engine::get_character(); if (!ch) goto end;

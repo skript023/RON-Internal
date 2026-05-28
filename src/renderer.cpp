@@ -172,7 +172,6 @@ namespace big
 
 		ImGui_ImplWin32_Init(g_pointers->m_hwnd);
 		ImGui_ImplDX11_Init(m_d3d_device.Get(), m_d3d_context.Get());
-		ImGui::GetIO().ImeWindowHandle = g_pointers->m_hwnd;
 
 		ImFontConfig font_cfg{};
 		font_cfg.FontDataOwnedByAtlas = false;

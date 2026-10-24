@@ -14,12 +14,15 @@ namespace big
 		void show(std::string title);
 		void show(std::string const& title, input_callback_t callback);
 		void hide();
-		void toggle() { g_settings.window.input ^= true; g_settings.window.mouse_active ^= true; }
+		void toggle() { if (is_open()) hide(); else open(); }
 		void callback(input_callback_t callback);
 		void execute();
 		bool is_open() { return g_settings.window.input; }
 
 	private:
+		void open();
+
+		bool m_mouse_before = false;
 		char m_input[64];
 		char m_title[64] = "Input Here";
 		std::stack<input_callback_t> m_callback;

@@ -5,14 +5,12 @@ namespace big
 	void input_service::show(std::string title)
 	{
 		strcpy(m_title, title.c_str());
-		g_settings.window.input = true;
-		g_settings.window.mouse_active = true;
+		open();
 	}
 	void input_service::show(std::string const& title, input_callback_t cb)
 	{
-		strcpy(m_title, title.c_str()); 
-		g_settings.window.input = true; 
-		g_settings.window.mouse_active = true;
+		strcpy(m_title, title.c_str());
+		open();
 
 		callback(cb);
 	}
@@ -21,8 +19,18 @@ namespace big
 		strcpy(m_title, "Input Here");
 		memset(m_input, 0, _ARRAYSIZE(m_input));
 
+		// Draw Mouse is the player's saved setting; the box only borrows it while it is open.
+		if (g_settings.window.input)
+			g_settings.window.mouse_active = m_mouse_before;
 		g_settings.window.input = false;
-		g_settings.window.mouse_active = false;
+	}
+	void input_service::open()
+	{
+		// Typing reaches the box only while the menu uses the mouse.
+		if (!g_settings.window.input)
+			m_mouse_before = g_settings.window.mouse_active;
+		g_settings.window.input = true;
+		g_settings.window.mouse_active = true;
 	}
 	void input_service::callback(input_callback_t callback)
 	{

@@ -93,23 +93,28 @@ namespace big::mission
 		if (!player || !gs)
 			return 0;
 
-		// Dropped weapons and items, and the mission's own evidence such as phones or documents.
-		std::vector<SDK::AActor*> evidence;
+		// PickupEvidence bags a dropped weapon, as the earlier Collect All Evidance used it; given other items and the
+		// mission's evidence it faulted inside the game before anything was collected. The mission's own evidence, such
+		// as phones or documents, is secured through its evidence state, as the earlier Auto Win did.
+		std::vector<SDK::ABaseItem*> weapons;
 		for (auto item : gs->AllItems)
 		{
-			if (unreal_engine::is_valid_actor(item) && item->EvidenceComponent && item->EvidenceComponent->CanBeCollected())
-				evidence.push_back(item);
+			if (unreal_engine::is_valid_actor(item) && item->IsA(SDK::ABaseWeapon::StaticClass()) && item->EvidenceComponent && item->EvidenceComponent->CanBeCollected())
+				weapons.push_back(item);
 		}
+		std::vector<SDK::AEvidenceActor*> mission_evidence;
 		for (auto actor : gs->AllEvidenceActors)
 		{
-			if (unreal_engine::is_valid_actor(actor) && (!actor->EvidenceComponent || actor->EvidenceComponent->CanBeCollected()))
-				evidence.push_back(actor);
+			if (unreal_engine::is_valid_actor(actor) && actor->EvidenceComponent && actor->EvidenceComponent->CanBeCollected())
+				mission_evidence.push_back(actor);
 		}
 
-		for (auto actor : evidence)
-			player->PickupEvidence(actor);
+		for (auto weapon : weapons)
+			player->PickupEvidence(weapon);
+		for (auto evidence : mission_evidence)
+			evidence->OnEvidenceStateChanged(SDK::EEvidenceActorState::Collected);
 
-		return static_cast<int>(evidence.size());
+		return static_cast<int>(weapons.size() + mission_evidence.size());
 	}
 
 	int surrender_suspects()

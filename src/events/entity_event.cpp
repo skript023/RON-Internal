@@ -114,6 +114,31 @@ namespace big
 		return kind;
 	}
 
+	template <typename F>
+	static void for_each_persistent_character(F&& callback)
+	{
+		auto world = SDK::UWorld::GetWorld();
+		if (!world || !world->PersistentLevel)
+			return;
+
+		auto& actors = world->PersistentLevel->Actors;
+		for (int i = 0; i < actors.Num(); ++i)
+		{
+			if (!actors.IsValidIndex(i))
+				continue;
+
+			auto actor = actors[i];
+			if (!unreal_engine::is_valid_actor(actor) || !actor->Class || !actor->IsA(SDK::AReadyOrNotCharacter::StaticClass()))
+				continue;
+
+			auto kind = classify_character(actor->Class);
+			if (!kind)
+				continue;
+
+			callback(static_cast<SDK::ACyberneticCharacter*>(actor), *kind);
+		}
+	}
+
 	static bool kind_enabled(esp_kind kind)
 	{
 		switch (kind)
@@ -330,7 +355,7 @@ namespace big
 
 		auto gs = ron::game_state();
 		auto controller = unreal_engine::get_player_controller();
-		if (!gs || !controller || !unreal_engine::get_character())
+		if (!ron::is_in_mission() || !gs || !controller)
 		{
 			g_static_targets.clear();
 			g_esp_data.publish();
@@ -374,12 +399,11 @@ namespace big
 
 		const bool want_box = _draw_box.get_state() || _draw_corner_box.get_state() || _draw_health.get_state();
 
-		ron::for_each_ai([&](SDK::ACyberneticCharacter* character) {
+		for_each_persistent_character([&](SDK::ACyberneticCharacter* character, esp_kind kind) {
 			if (!character->Class)
 				return;
 
-			auto kind = classify_character(character->Class);
-			if (!kind || !kind_enabled(*kind))
+			if (!kind_enabled(kind))
 				return;
 
 			auto location = character->K2_GetActorLocation();
@@ -398,10 +422,10 @@ namespace big
 			const auto status = character->CharacterHealth ? character->CharacterHealth->HealthStatus : SDK::EPlayerHealthStatus::HS_NotAvailable;
 
 			esp_data data{};
-			data.kind = *kind;
+			data.kind = kind;
 			data.screen = screen;
 			data.distance = distance;
-			data.color = character_color(*kind, status);
+			data.color = character_color(kind, status);
 			data.display_text = std::format("{} [{}] [{:.0f}m]", ron::team_name(character), ron::health_status_name(status), distance);
 
 			if (_draw_health.get_state())

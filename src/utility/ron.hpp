@@ -25,6 +25,17 @@ namespace big::ron
 		return static_cast<SDK::AReadyOrNotPlayerController*>(controller);
 	}
 
+	inline bool is_in_mission()
+	{
+		auto world = SDK::UWorld::GetWorld();
+		auto gs = game_state();
+		auto controller = unreal_engine::get_player_controller();
+		auto character = unreal_engine::get_character();
+
+		return world && world->PersistentLevel && gs && controller && unreal_engine::is_valid_actor(character)
+		    && gs->MatchState == SDK::EMatchState::MS_Playing;
+	}
+
 	// Single player, or the host of the lobby: the game only accepts mission changes made here.
 	inline bool is_host()
 	{

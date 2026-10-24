@@ -8,10 +8,11 @@
 #include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weapon_backup.hpp"
 
 namespace big
 {
+	// VelocityRecoilMultiplier belongs to No Recoil; changing it here too would let one feature restore the other's zero.
 	struct spread_backup
 	{
 		SDK::FRotator SpreadPattern;
@@ -19,30 +20,28 @@ namespace big
 		float SpreadReturnRate;
 		float FirstShotSpread;
 		float VelocitySpreadMultiplier;
-		float VelocityRecoilMultiplier;
 		float ADSSpreadMultiplier;
 		bool bIgnoreAmmoTypeSpread;
 	};
 
-	static std::unordered_map<SDK::ABaseMagazineWeapon*, spread_backup> g_backup;
+	static weapon_backup<spread_backup> g_backup;
 
 	static void backup_weapon(SDK::ABaseMagazineWeapon* wep)
 	{
 		if (!wep) return;
 
 		// kalau belum pernah dibackup
-		if (g_backup.find(wep) == g_backup.end())
+		if (!g_backup.contains(wep))
 		{
-			g_backup[wep] = {
+			g_backup.add(wep, {
 				wep->SpreadPattern,
 				wep->PendingSpread,
 				wep->SpreadReturnRate,
 				wep->FirstShotSpread,
 				wep->VelocitySpreadMultiplier,
-				wep->VelocityRecoilMultiplier,
 				wep->ADSSpreadMultiplier,
 				wep->bIgnoreAmmoTypeSpread
-			};
+			});
 		}
 	}
 
@@ -55,15 +54,15 @@ namespace big
 		wep->SpreadReturnRate = 0.0f;
 		wep->FirstShotSpread = 0.0f;
 		wep->VelocitySpreadMultiplier = 0.0f;
-		wep->VelocityRecoilMultiplier = 0.0f;
 		wep->ADSSpreadMultiplier = 0.0f;
 		wep->bIgnoreAmmoTypeSpread = true;
 	}
 
 	static void restore_all()
 	{
-		for (auto& [wep, data] : g_backup)
+		for (auto& [weapon, data] : g_backup)
 		{
+			auto wep = weapon.get();
 			if (!wep) continue;
 
 			wep->SpreadPattern = data.SpreadPattern;
@@ -71,7 +70,6 @@ namespace big
 			wep->SpreadReturnRate = data.SpreadReturnRate;
 			wep->FirstShotSpread = data.FirstShotSpread;
 			wep->VelocitySpreadMultiplier = data.VelocitySpreadMultiplier;
-			wep->VelocityRecoilMultiplier = data.VelocityRecoilMultiplier;
 			wep->ADSSpreadMultiplier = data.ADSSpreadMultiplier;
 			wep->bIgnoreAmmoTypeSpread = data.bIgnoreAmmoTypeSpread;
 		}
@@ -100,6 +98,8 @@ namespace big
 			{
 				if (auto wep = c->GetEquippedWeapon())
 				{
+					// A weapon switched to while the feature is on is backed up before it changes too.
+					backup_weapon(wep);
 					apply_no_spread(wep);
 				}
 			}
@@ -111,5 +111,5 @@ namespace big
 		}
 	};
 
-	static no_spread _no_spread("no_spread", "No Spread", "");
+	static no_spread _no_spread("no_spread", "No Spread", "Every shot goes where the sights point");
 }

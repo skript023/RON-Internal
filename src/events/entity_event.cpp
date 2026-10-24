@@ -1,32 +1,18 @@
-#include "script.hpp"
 #include "entity_event.hpp"
+#include "script.hpp"
+#include "features/features.hpp"
 #include "utility/player.hpp"
+#include "utility/ron.hpp"
 
 namespace big
 {
+	using namespace features;
+
 	struct name_map_entry
 	{
 		std::string_view key;
 		std::string_view value;
 	};
-
-	struct esp_result
-	{
-		std::string label;
-		Color color;
-		bool enemy;
-	};
-
-	// Enemy
-	constexpr std::array<name_map_entry, 1> enemy{ {
-		{ "CyberneticsSuspect_V2_C", "Suspect" }
-	} };
-
-	// Friend
-	constexpr std::array<name_map_entry, 2> friendlies{ {
-		{ "CyberneticsSwat_V2_C", "Swat" },
-		{ "Cybernetics_Civilian_V2_C", "Civilian" }
-	} };
 
 	// Weapons
 	constexpr std::array<name_map_entry, 17> weapons{ {
@@ -49,48 +35,188 @@ namespace big
 		{ "Secondary_Taser_V2_C", "Taser" }
 	} };
 
-	// Traps
-	constexpr std::array<name_map_entry, 3> traps{ {
-		{ "BP_AttachedGrenadeTrap_C", "Grenade Trap" },
-		{ "BP_AttachedFlashbangTrap_C", "Flashbang Trap" },
-		{ "BP_AttachedAlarmTrap_C", "Alarm Trap" }
-	} };
+	// Something that stays where it is, such as a trap or a piece of evidence. These are found by a scan twice a
+	// second; only their projection runs every frame.
+	struct static_target
+	{
+		esp_kind kind;
+		SDK::FVector location;
+		std::string label;
+		Color color;
+	};
 
-	// Objectives
-	constexpr std::array<name_map_entry, 34> objectives{ {
-		{ "Objective_Hotel_Evidence_Weapon_02_C", "Evidence Weapon" },
-		{ "Objective_Hotel_Evidence_Weapon_01_C", "Evidence Weapon" },
-		{ "Objective_Hotel_RescueStrasky_C", "Rescue Strasky" },
-		{ "Objective_Hotel_RescueBrady_C", "Rescue Brady" },
-		{ "Objective_Hotel_ArrestJohnnyR_C", "Arrest Johnny" },
-		{ "Objective_Gas_Rescue_CrystalLeighton_C", "Rescue Crystal" },
-		{ "Objective_Gas_Report_MudasirVarma_C", "Report Mudasir" },
-		{ "Objective_Gas_Rescue_SharlaLeighton_C", "Rescue Sharla" },
-		{ "Objective_Zoo_Neutralize_TaggedSuspect_C", "Neutralize Suspect" },
-		{ "Objective_Zoo_Rescue_Civilians_C", "Rescue Civilian" },
-		{ "Objective_Valley_Seize_Laptop_C", "Seize Laptop" },
-		{ "Objective_Valley_Seize_Hard_Drive_01_C", "Seize Harddrive" },
-		{ "Objective_Valley_ArrestAmos_C", "Arrest Amos" },
-		{ "Objective_Valley_Seize_Hard_Drive_02_C", "Seize Harddrive" },
-		{ "Objective_Port_Dossier_C", "Dossier" },
-		{ "Objective_Port_ArrestSuspects_C", "Arrest Suspect" },
-		{ "Objective_Port_ArrestAuctioneer_C", "Arrest Auctioneer" },
-		{ "Objective_Port_RescueSlaves_C", "Rescue Slave" },
-		{ "Objective_Importer_ArrestJackAdams_C", "Arrest Jack" },
-		{ "Objective_Importer_ArrestMariaLopez_C", "Arrest Maria" },
-		{ "Objective_Importer_RescueEugeneGomez_C", "Rescue Eugene" },
-		{ "Objective_FastFood_RescueOfficer_C", "Rescue Officer" },
-		{ "Objective_FastFood_StaffRoster_C", "StaffRoster" },
-		{ "Objective_FastFood_Neutralize_Gunman_C", "Neutralize Gunman" },
-		{ "Objective_Ridgeline_ArrestGerardScott_C", "Arrest Gerard" },
-		{ "Objective_Ridgeline_ArrestGerardAccomplice_C", "Arrest Accomplice" },
-		{ "Objective_Shipyard_ExtractEvidence_C", "Extract Evidence" },
-		{ "Objective_Shipyard_Exfil_C", "Exfil" },
-		{ "Objective_Shipyard_FindEvidence_C", "Evidence" },
-		{ "Objective_Shipyard_FindClues_C", "Clue" },
-		{ "Objective_Penthouse_LocateSailor_C", "Sailor" },
-		{ "Objective_Penthouse_LocateLaurie_C", "Laurie" }
-	} };
+	static std::vector<static_target> g_static_targets;
+
+	static const char* item_label(SDK::ABaseItem* item)
+	{
+		static std::unordered_map<SDK::UClass*, const char*> labels;
+		if (auto it = labels.find(item->Class); it != labels.end())
+			return it->second;
+
+		const char* label = "Evidence";
+		if (item->IsA(SDK::ABaseWeapon::StaticClass()))
+		{
+			label = "Weapon";
+			const auto name = item->Class->GetName();
+			for (const auto& e : weapons)
+			{
+				if (name.contains(e.key))
+				{
+					label = e.value.data();
+					break;
+				}
+			}
+		}
+
+		labels.emplace(item->Class, label);
+		return label;
+	}
+
+	enum class level_kind : std::uint8_t
+	{
+		none,
+		trap,
+		collectible
+	};
+
+	// Classes never change, so each one is looked up once instead of walking its class chain for every actor.
+	static level_kind classify_level_actor(SDK::UClass* cls)
+	{
+		static std::unordered_map<SDK::UClass*, level_kind> cache;
+		if (auto it = cache.find(cls); it != cache.end())
+			return it->second;
+
+		auto kind = level_kind::none;
+		if (cls->IsSubclassOf(SDK::ATrapActor::StaticClass()))
+			kind = level_kind::trap;
+		else if (cls->IsSubclassOf(SDK::ACollectable::StaticClass()))
+			kind = level_kind::collectible;
+
+		cache.emplace(cls, kind);
+		return kind;
+	}
+
+	static std::optional<esp_kind> classify_character(SDK::UClass* cls)
+	{
+		static std::unordered_map<SDK::UClass*, std::optional<esp_kind>> cache;
+		if (auto it = cache.find(cls); it != cache.end())
+			return it->second;
+
+		std::optional<esp_kind> kind;
+		if (cls->IsSubclassOf(SDK::ASuspectCharacter::StaticClass()))
+			kind = esp_kind::suspect;
+		else if (cls->IsSubclassOf(SDK::ACivilianCharacter::StaticClass()))
+			kind = esp_kind::civilian;
+		else if (cls->IsSubclassOf(SDK::ASWATCharacter::StaticClass()))
+			kind = esp_kind::swat;
+
+		cache.emplace(cls, kind);
+		return kind;
+	}
+
+	static bool kind_enabled(esp_kind kind)
+	{
+		switch (kind)
+		{
+		case esp_kind::suspect: return _esp_suspects.get_state();
+		case esp_kind::civilian: return _esp_civilians.get_state();
+		case esp_kind::swat: return _esp_swat.get_state();
+		case esp_kind::trap: return _esp_traps.get_state();
+		case esp_kind::evidence_weapon:
+		case esp_kind::evidence: return _esp_evidence.get_state();
+		case esp_kind::reportable: return _esp_reportables.get_state();
+		case esp_kind::collectible: return _esp_collectibles.get_state();
+		}
+
+		return false;
+	}
+
+	static void refresh_static_targets(SDK::AReadyOrNotGameState* gs)
+	{
+		g_static_targets.clear();
+
+		auto add = [](esp_kind kind, SDK::AActor* actor, std::string label, Color color) {
+			g_static_targets.push_back({ kind, actor->K2_GetActorLocation(), std::move(label), color });
+		};
+
+		if (_esp_evidence.get_state())
+		{
+			// Dropped suspect weapons and items are evidence until someone picks them up.
+			for (auto item : gs->AllItems)
+			{
+				if (!unreal_engine::is_valid_actor(item) || !item->EvidenceComponent || !item->EvidenceComponent->CanBeCollected())
+					continue;
+
+				add(esp_kind::evidence_weapon, item, item_label(item), { 255, 255, 0, 255 });
+			}
+
+			for (auto evidence : gs->AllEvidenceActors)
+			{
+				if (!unreal_engine::is_valid_actor(evidence))
+					continue;
+				if (evidence->EvidenceComponent && !evidence->EvidenceComponent->CanBeCollected())
+					continue;
+
+				auto name = ron::text(evidence->EvidenceName);
+				add(esp_kind::evidence, evidence, name.empty() ? "Evidence" : name, { 255, 220, 0, 255 });
+			}
+		}
+
+		if (_esp_reportables.get_state())
+		{
+			for (auto reportable : gs->AllReportableActors)
+			{
+				if (!unreal_engine::is_valid_actor(reportable) || reportable->bHasBeenReported || !reportable->bReportableEnabled)
+					continue;
+
+				auto name = ron::text(reportable->ReportableName);
+				add(esp_kind::reportable, reportable, name.empty() ? "Reportable" : name, { 0, 200, 255, 255 });
+			}
+		}
+
+		if (!_esp_traps.get_state() && !_esp_collectibles.get_state())
+			return;
+
+		auto world = SDK::UWorld::GetWorld();
+		if (!world)
+			return;
+
+		// Every loaded level, not only the persistent one: maps stream parts of the building in.
+		for (auto level : world->Levels)
+		{
+			if (!level)
+				continue;
+
+			for (auto actor : level->Actors)
+			{
+				if (!unreal_engine::is_valid_actor(actor) || !actor->Class)
+					continue;
+
+				switch (classify_level_actor(actor->Class))
+				{
+				case level_kind::trap:
+				{
+					auto trap = static_cast<SDK::ATrapActor*>(actor);
+					if (_esp_traps.get_state() && trap->TrapStatus == SDK::ETrapState::TS_Live)
+						add(esp_kind::trap, trap, ron::trap_type_name(trap->TrapType), { 255, 120, 0, 255 });
+					break;
+				}
+				case level_kind::collectible:
+				{
+					if (!_esp_collectibles.get_state())
+						break;
+
+					auto collectible = static_cast<SDK::ACollectable*>(actor);
+					auto name = ron::text(collectible->ItemName);
+					add(esp_kind::collectible, collectible, name.empty() ? "Collectible" : name, { 200, 120, 255, 255 });
+					break;
+				}
+				default:
+					break;
+				}
+			}
+		}
+	}
 
 	static bool is_skeleton_variant_2(SDK::USkeletalMeshComponent* mesh)
 	{
@@ -98,163 +224,6 @@ namespace big
 
 		auto name = mesh->GetBoneName(45).ToString();
 		return name == "Head";
-	}
-
-	static const char* find_name(std::string_view key, const auto& table)
-	{
-		for (const auto& e : table)
-		{
-			if (key.contains(e.key))
-				return e.value.data();
-		}
-
-		return nullptr;
-	}
-
-	static std::optional<esp_result> filter_actor(SDK::AActor* actor)
-	{
-		if (!actor) return std::nullopt;
-
-		if (actor->IsA(SDK::ATrapActor::StaticClass()))
-		{
-			if (auto trap = static_cast<SDK::ATrapActor*>(actor); trap)
-			{
-				switch (trap->TrapType)
-				{
-				case SDK::ETrapType::Explosive:
-					return esp_result{ "Explosive Trap", {255, 120, 0, 255}, false };
-
-				case SDK::ETrapType::Flashbang:
-					return esp_result{ "Flashbang Trap", {255, 120, 0, 255}, false };
-
-				case SDK::ETrapType::Alarm:
-					return esp_result{ "Alarm Trap", {255, 120, 0, 255}, false };
-
-				case SDK::ETrapType::ToxicGas:
-					return esp_result{ "Gas Trap", {255, 120, 0, 255}, false };
-
-				case SDK::ETrapType::Unknown:
-					return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
-
-				case SDK::ETrapType::ETrapType_MAX:
-					return esp_result{ "Invalid Trap", {255, 120, 0, 255}, false };
-
-				default:
-					return esp_result{ "Unknown Trap", {255, 120, 0, 255}, false };
-				}
-			}
-		}
-
-		if (actor->IsA(SDK::ACivilianCharacter::StaticClass()))
-		{
-			if (auto civilian = static_cast<SDK::ACivilianCharacter*>(actor); civilian)
-			{
-				return esp_result{ "Civilian", {0, 255, 0, 255}, false };
-			}
-		}
-
-		if (actor->IsA(SDK::ASWATCharacter::StaticClass()))
-		{
-			if (auto swat = static_cast<SDK::ASWATCharacter*>(actor); swat)
-			{
-				return esp_result{ "Swat", {0, 255, 0, 255}, false };
-			}
-		}
-
-		if (actor->IsA(SDK::ASuspectCharacter::StaticClass()))
-		{
-			if (auto suspect = static_cast<SDK::ASuspectCharacter*>(actor); suspect)
-			{
-				return esp_result{ "Suspect", {255, 0, 0, 255}, true };
-			}
-		}
-
-		if (actor->IsA(SDK::ABaseMagazineWeapon::StaticClass()))
-		{
-			if (auto wep = static_cast<SDK::ABaseMagazineWeapon*>(actor); wep)
-			{
-				auto name = wep->GetName();
-				for (const auto& e : weapons)
-				{
-					if (name.contains(e.key))
-						return esp_result{ e.value.data(), {255, 255, 0, 255}, false };
-				}
-			}
-		}
-
-		if (actor->IsA(SDK::AReportableActor::StaticClass()))
-		{
-			if (auto report = static_cast<SDK::AReportableActor*>(actor); report)
-			{
-				Color color = report->bReportableEnabled ? Color{ 150, 150, 150, 255 } : Color{ 0, 200, 255, 255 };
-				return esp_result{ report->ReportableName.ToString(), color, false };
-			}
-		}
-
-		if (actor->IsA(SDK::AObjective::StaticClass()))
-		{
-			if (auto obj = static_cast<SDK::AObjective*>(actor); obj)
-			{
-				Color color = Color{ 150, 150, 150, 255 };
-
-				if (obj->IsObjectiveCompleted())
-					color = Color{ 0, 200, 255, 255 };
-
-				if (obj->IsObjectiveFailed())
-					color = Color{ 255, 200, 0, 255 };
-
-				return esp_result{ obj->ObjectiveName.ToString(), color, false };
-			}
-		}
-
-		return std::nullopt;
-	}
-
-	static std::optional<esp_result> filter_actor(std::string_view name)
-	{
-		if (auto r = find_name(name, enemy))
-			return esp_result{ r, {255, 0, 0, 255}, true };
-
-		if (auto r = find_name(name, friendlies))
-			return esp_result{ r, {0, 255, 0, 255}, false };
-
-		if (auto r = find_name(name, weapons))
-			return esp_result{ r, {255, 255, 0, 255}, false };
-
-		if (auto r = find_name(name, traps))
-			return esp_result{ r, {255, 120, 0, 255}, false };
-
-		if (auto r = find_name(name, objectives))
-			return esp_result{ r, {0, 200, 255, 255}, false };
-
-		return std::nullopt;
-	}
-
-	static const char* get_status(SDK::EPlayerHealthStatus status)
-	{
-		using namespace SDK;
-
-		switch (status)
-		{
-		case EPlayerHealthStatus::HS_Arrested:
-			return "Arrested";
-		case EPlayerHealthStatus::HS_Dead:
-			return "Dead";
-		case EPlayerHealthStatus::HS_Downed:
-			return "Downed";
-		case EPlayerHealthStatus::HS_Healthy:
-			return "Healthy";
-		case EPlayerHealthStatus::HS_Incapacitated:
-			return "Incapacitated";
-		case EPlayerHealthStatus::HS_Injured:
-			return "Injured";
-		case EPlayerHealthStatus::HS_NotAvailable:
-			return "Not Available";
-		case EPlayerHealthStatus::HS_MAX:
-			return "MAX";
-		}
-
-		return "None";
 	}
 
 	static bool build_skeleton(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, std::vector<bone_line>& out)
@@ -340,221 +309,153 @@ namespace big
 		return true;
 	}
 
-	void entity_event::run()
+	static Color character_color(esp_kind kind, SDK::EPlayerHealthStatus status)
 	{
-		if (g_pointers->m_tls_idx)
-		{
-			auto value = TlsGetValue(*g_pointers->m_tls_idx);
-			TlsSetValue(*g_pointers->m_tls_idx, value);
+		using enum SDK::EPlayerHealthStatus;
+		if (status == HS_Dead || status == HS_Incapacitated || status == HS_Arrested)
+			return { 150, 150, 150, 200 };
 
-			LOG(INFO) << "TLS set same index as main thread";
+		switch (kind)
+		{
+		case esp_kind::suspect: return { 255, 0, 0, 255 };
+		case esp_kind::civilian: return { 0, 255, 0, 255 };
+		default: return { 80, 160, 255, 255 };
+		}
+	}
+
+	static void build_frame()
+	{
+		auto& back = g_esp_data.back();
+		back.clear();
+
+		auto gs = ron::game_state();
+		auto controller = unreal_engine::get_player_controller();
+		if (!gs || !controller || !unreal_engine::get_character())
+		{
+			g_static_targets.clear();
+			g_esp_data.publish();
+			return;
 		}
 
+		static auto last_scan = std::chrono::steady_clock::time_point{};
+		static const void* last_game_state = nullptr;
+		const auto now = std::chrono::steady_clock::now();
+		if (gs != last_game_state || now - last_scan > 500ms)
+		{
+			refresh_static_targets(gs);
+			last_scan = now;
+			last_game_state = gs;
+		}
+
+		const auto origin = player::get_player_coords();
+		const float max_distance = _esp_distance.get_state();
+
+		for (const auto& target : g_static_targets)
+		{
+			if (!kind_enabled(target.kind))
+				continue;
+
+			const float distance = origin.GetDistanceToInMeters(target.location);
+			if (distance > max_distance)
+				continue;
+
+			SDK::FVector2D screen;
+			if (!controller->ProjectWorldLocationToScreen(target.location, &screen, false))
+				continue;
+
+			esp_data data{};
+			data.kind = target.kind;
+			data.screen = screen;
+			data.distance = distance;
+			data.display_text = std::format("{} [{:.0f}m]", target.label, distance);
+			data.color = target.color;
+			back.push_back(std::move(data));
+		}
+
+		const bool want_box = _draw_box.get_state() || _draw_corner_box.get_state() || _draw_health.get_state();
+
+		ron::for_each_ai([&](SDK::ACyberneticCharacter* character) {
+			if (!character->Class)
+				return;
+
+			auto kind = classify_character(character->Class);
+			if (!kind || !kind_enabled(*kind))
+				return;
+
+			auto location = character->K2_GetActorLocation();
+			const float distance = origin.GetDistanceToInMeters(location);
+			if (distance > max_distance)
+				return;
+
+			// Labels sit at the feet, under the box.
+			if (auto feet = unreal_engine::get_location_bone(character, EBonesIndex::Root); feet.X != 0.f || feet.Y != 0.f || feet.Z != 0.f)
+				location = feet;
+
+			SDK::FVector2D screen;
+			if (!controller->ProjectWorldLocationToScreen(location, &screen, false))
+				return;
+
+			const auto status = character->CharacterHealth ? character->CharacterHealth->HealthStatus : SDK::EPlayerHealthStatus::HS_NotAvailable;
+
+			esp_data data{};
+			data.kind = *kind;
+			data.screen = screen;
+			data.distance = distance;
+			data.color = character_color(*kind, status);
+			data.display_text = std::format("{} [{}] [{:.0f}m]", ron::team_name(character), ron::health_status_name(status), distance);
+
+			if (_draw_health.get_state())
+			{
+				data.health = character->GetCurrentHealth();
+				data.max_health = character->GetMaxHealth();
+			}
+
+			if (_draw_skeleton.get_state())
+				data.has_skeleton = build_skeleton(character, controller, data.skeleton);
+			if (want_box)
+				data.has_box = build_box(character, controller, data.box_x, data.box_y, data.box_w, data.box_h);
+			if (_draw_box_3d.get_state())
+				data.has_box_3d = build_box_3d(character, controller, data.box_3d);
+
+			back.push_back(std::move(data));
+		});
+
+		g_esp_data.publish();
+	}
+
+	// A fault reading one actor skips this frame instead of ending the worker for the rest of the session.
+	static void build_frame_guarded()
+	{
+		TRY_CLAUSE
+		{
+			build_frame();
+		}
+		EXCEPT_CLAUSE
+	}
+
+	task<void> entity_event::run()
+	{
 		LOG(INFO) << "Entity Event Registered";
 
+		bool had_data = false;
 		while (g_running)
 		{
-			auto& back = g_esp_data.back(); back.clear();
-			auto world = SDK::UWorld::GetWorld(); if (!world) goto end;
-			auto ch = unreal_engine::get_character(); if (!ch) goto end;
-			auto c = unreal_engine::get_player_controller(); if (!c) goto end;
-			auto level = world->PersistentLevel; if (!level) goto end;
-
-			if (auto gs = world->GameState; gs)
+			if (_esp_enabled.get_state())
 			{
-				if (auto ron_gs = static_cast<SDK::AReadyOrNotGameState*>(gs))
-				{
-					auto objs = ron_gs->AllReportableActors;
-					auto missions = ron_gs->MissionObjectives;
-
-					for (int i = 0; i < objs.Num(); ++i)
-					{
-						if (!objs.IsValidIndex(i)) goto end;
-
-						auto obj = objs[i];
-						if (!obj) goto end;
-
-						auto location = obj->K2_GetActorLocation();
-
-						float distance = player::get_player_coords()
-							.GetDistanceToInMeters(location);
-
-						SDK::FVector2D screen;
-						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
-							goto end;
-
-						auto name = obj->ReportableName.ToString();
-
-						char buffer[128];
-						snprintf(
-							buffer,
-							sizeof(buffer),
-							"%s [%.2f]m",
-							name.c_str(),
-							distance
-						);
-
-						esp_data actor_data;
-						actor_data.location = location;
-						actor_data.screen = screen;
-						actor_data.display_classname = "Reportable";
-						actor_data.display_text = buffer;
-						actor_data.distance = distance;
-						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
-						actor_data.color = obj->bReportableEnabled
-							? Color{ 150,150,150,255 }
-						: Color{ 0, 200, 255, 255 };
-						actor_data.enemy = false;
-
-						back.push_back(actor_data);
-					}
-
-					for (size_t i = 0; i < missions.Num(); i++)
-					{
-						if (!missions.IsValidIndex(i)) continue;
-
-						auto mission = missions[i];
-						if (!mission) continue;
-
-						auto location = mission->K2_GetActorLocation();
-
-						float distance = player::get_player_coords()
-							.GetDistanceToInMeters(location);
-
-						SDK::FVector2D screen;
-						if (!c->ProjectWorldLocationToScreen(location, &screen, true))
-							continue;
-
-
-						auto name = mission->ObjectiveName.ToString();
-
-						char buffer[128];
-						snprintf(
-							buffer,
-							sizeof(buffer),
-							"%s [%.2f]m",
-							name.c_str(),
-							distance
-						);
-
-						Color color = Color{ 150, 150, 150, 255 };
-
-						if (mission->IsObjectiveCompleted())
-							color = Color{ 0, 200, 255, 255 };
-
-						if (mission->IsObjectiveFailed())
-							color = Color{ 255, 200, 0, 255 };
-
-						esp_data actor_data;
-						actor_data.location = location;
-						actor_data.screen = screen;
-						actor_data.display_classname = "Objective";
-						actor_data.display_text = buffer;
-						actor_data.distance = distance;
-						actor_data.status = SDK::EPlayerHealthStatus::HS_NotAvailable;
-						actor_data.color = color;
-						actor_data.enemy = false;
-
-						back.push_back(actor_data);
-					}
-				}
+				build_frame_guarded();
+				had_data = true;
+			}
+			else if (had_data)
+			{
+				g_esp_data.clear_all();
+				g_static_targets.clear();
+				had_data = false;
 			}
 
-			if (auto actors = level->Actors; actors.Num() > 0)
-			{
-				for (size_t i = 0; i < actors.Num(); i++)
-				{
-					if (!actors.IsValidIndex(i)) continue;
-
-					auto actor = actors[i];
-
-					if (!actor || (uintptr_t)actor < 0x10000) continue;
-
-					auto result = filter_actor(actor);
-
-					if (!result) continue;
-
-					auto location = actor->K2_GetActorLocation();
-
-					float distance = player::get_player_coords().GetDistanceToInMeters(location);
-
-					auto name = actor->GetFullName();
-
-					SDK::AReadyOrNotCharacter* target_pawn = nullptr;
-
-					SDK::EPlayerHealthStatus status = SDK::EPlayerHealthStatus::HS_NotAvailable;
-
-					if (actor->IsA(SDK::AReadyOrNotCharacter::StaticClass()))
-					{
-						if (target_pawn = static_cast<SDK::AReadyOrNotCharacter*>(actor))
-						{
-							if (auto health = target_pawn->CharacterHealth)
-							{
-								if (health)
-									status = health->HealthStatus;
-							}
-
-							location = unreal_engine::get_location_bone(target_pawn, EBonesIndex::Root);
-						}
-					}
-					
-					SDK::FVector2D screen;
-					if (!c->ProjectWorldLocationToScreen(location, &screen, false)) continue;
-
-					char buffer[128];
-
-					if (target_pawn)
-					{
-						snprintf(
-							buffer,
-							sizeof(buffer),
-							"%s [%s] [%.2f]m",
-							result->label.c_str(),
-							get_status(status),
-							distance
-						);
-					}
-					else
-					{
-						snprintf(
-							buffer,
-							sizeof(buffer),
-							"%s [%.2f]m",
-							result->label.c_str(),
-							distance
-						);
-					}
-
-					esp_data actor_data;
-					actor_data.location = location;
-					actor_data.screen = screen;
-					actor_data.display_classname = name;
-					actor_data.display_text = buffer;
-					actor_data.distance = distance;
-					actor_data.status = status;
-					actor_data.color = result->color;
-					actor_data.enemy = result->enemy;
-					actor_data.has_skeleton = build_skeleton(target_pawn, c, actor_data.skeleton);
-
-					actor_data.has_box = build_box(
-						target_pawn,
-						c,
-						actor_data.box_x,
-						actor_data.box_y,
-						actor_data.box_w,
-						actor_data.box_h
-					);
-
-					actor_data.has_box_3d = build_box_3d(target_pawn, c, actor_data.box_3d);
-
-					back.push_back(actor_data);
-				}
-			}
-
-			g_esp_data.publish();
+			co_await this_task::wait();
 		}
 
-	end:
-		std::this_thread::sleep_for(30ms);
+		g_esp_data.clear_all();
+		co_return;
 	}
 }

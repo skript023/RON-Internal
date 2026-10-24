@@ -8,7 +8,7 @@
 #include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weapon_backup.hpp"
 
 namespace big
 {
@@ -19,20 +19,20 @@ namespace big
 		float PenetrationDistance;
 	};
 
-	static std::unordered_map<SDK::ABaseMagazineWeapon*, peneration> g_backup;
+	static weapon_backup<peneration> g_backup;
 
 	static void backup_weapon(SDK::ABaseMagazineWeapon* wep)
 	{
 		if (!wep) return;
 
 		// kalau belum pernah dibackup
-		if (g_backup.find(wep) == g_backup.end())
+		if (!g_backup.contains(wep))
 		{
-			g_backup[wep] = {
+			g_backup.add(wep, {
 				wep->CurrentAmmoType.PenetrationDistance,
 				wep->CurrentAmmoType.PenetrationLevel,
 				wep->PenetrationDistance
-			};
+			});
 		}
 	}
 
@@ -42,18 +42,19 @@ namespace big
 
 		wep->CurrentAmmoType.PenetrationDistance = 100000;
 		wep->CurrentAmmoType.PenetrationLevel = 10;
-		wep->PenetrationDistance = 10000; // Move this
+		wep->PenetrationDistance = 10000;
 	}
 
 	static void restore_all()
 	{
-		for (auto& [wep, data] : g_backup)
+		for (auto& [weapon, data] : g_backup)
 		{
+			auto wep = weapon.get();
 			if (!wep) continue;
 
 			wep->CurrentAmmoType.PenetrationDistance = data.CPenetrationDistance;
 			wep->CurrentAmmoType.PenetrationLevel = data.CPenetrationLevel;
-			wep->PenetrationDistance = data.CPenetrationDistance; // Move this
+			wep->PenetrationDistance = data.PenetrationDistance;
 		}
 
 		g_backup.clear();
@@ -80,6 +81,8 @@ namespace big
 			{
 				if (auto wep = c->GetEquippedWeapon())
 				{
+					// A weapon switched to while the feature is on is backed up before it changes too.
+					backup_weapon(wep);
 					apply_peneration(wep);
 				}
 			}
@@ -91,5 +94,5 @@ namespace big
 		}
 	};
 
-	static penetrate_wall _penetrate_wall("penetrate_wall", "Wall Peneration", "");
+	static penetrate_wall _penetrate_wall("penetrate_wall", "Wall Penetration", "Bullets go through walls and doors");
 }

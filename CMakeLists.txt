@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20.x)
 
-project(Strinova CXX ASM_MASM)
+project(ReadyOrNot CXX ASM_MASM)
 
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
@@ -23,11 +23,12 @@ message(STATUS "OpenSSL::Crypto -> ${crypto_loc}")
 
 # Fetch modules
 message("\nFetching modules")
-include(scripts/minhook.cmake)
+include(scripts/ellohim_hook.cmake)
 include(scripts/json.cmake)
 
 message("\nFetching custom modules")
 include(scripts/imgui.cmake)
+include(scripts/astra.cmake)
 include(scripts/stbi.cmake)
 include(scripts/websocket.cmake)
 include(scripts/asio.cmake)
@@ -35,8 +36,8 @@ include(scripts/discord.cmake)
 include(scripts/g3log.cmake)
 include(scripts/sdk.cmake)
 
-# Strinova source files
-message(STATUS "Strinova")
+# Ready Or Not source files
+message(STATUS "ReadyOrNot")
 file(GLOB_RECURSE SRC_MAIN
     "${SRC_DIR}/**.hpp"
     "${SRC_DIR}/**.h"
@@ -46,16 +47,24 @@ file(GLOB_RECURSE SRC_MAIN
     "${SRC_DIR}/**.asm"
 )
 
-add_library(Strinova MODULE "${SRC_MAIN}")  # Use STATIC or SHARED depending on requirements
+add_library(ReadyOrNot MODULE "${SRC_MAIN}")  # Use STATIC or SHARED depending on requirements
+
+# The Astra host parts every game shares: menu canvas, notifications, settings.json live reload, and feature hotkeys.
+target_sources(ReadyOrNot PRIVATE
+    "${astra_SOURCE_DIR}/host/canvas.cpp"
+    "${astra_SOURCE_DIR}/host/notification.cpp"
+    "${astra_SOURCE_DIR}/host/settings.cpp"
+    "${astra_SOURCE_DIR}/host/hotkeys.cpp"
+)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-set_property(TARGET Strinova PROPERTY CXX_STANDARD 26)
+set_property(TARGET ReadyOrNot PROPERTY CXX_STANDARD 26)
 
 # Organize the source tree in IDE
 source_group(TREE ${SRC_DIR} PREFIX "src" FILES ${SRC_MAIN})
 
 # Include directories for the target
-target_include_directories(Strinova PRIVATE 
+target_include_directories(ReadyOrNot PRIVATE
     "${SRC_DIR}"
     "${SRC_DIR}/lib"
     "${SRC_DIR}/menu"
@@ -69,16 +78,16 @@ target_include_directories(Strinova PRIVATE
     "${stbi_SOURCE_DIR}"
     "${websocket_SOURCE_DIR}"
     "${asio_SOURCE_DIR}/asio/include"
-    "${minhook_SOURCE_DIR}/src/hde"
+    "${ellohim_hook_SOURCE_DIR}/src/hooking/core/hde"
     "${discord_SOURCE_DIR}/include"
     "${sdk_SOURCE_DIR}"
 )
 
 # Precompiled headers
-target_precompile_headers(Strinova PRIVATE "${SRC_DIR}/common.hpp")
+target_precompile_headers(ReadyOrNot PRIVATE "${SRC_DIR}/common.hpp")
 
 # Link with external libraries
-target_link_libraries(Strinova PRIVATE sdk minhook AsyncLogger imgui dbghelp discord ${ZLIB_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto Crypt32)
+target_link_libraries(ReadyOrNot PRIVATE sdk EllohimHook AsyncLogger imgui astra::ui astra::banners d3d11 d3d12 dxgi dbghelp discord ${ZLIB_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto Crypt32)
 
 # Compiler options for MSVC and others
 if (MSVC)
@@ -86,19 +95,20 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /O2 /Oi /Ot /Oy /Ob3 /sdl- /GL /GF /GS- /Gw")
     string(REPLACE "/Ob1" "/Ob3" CMAKE_CXX_FLAGS_RELWITHDEBINFO ${CMAKE_CXX_FLAGS_RELWITHDEBINFO})
 else ()
-    target_compile_options(Ellohim PRIVATE -Wa,-mbig-obj)
+    target_compile_options(ReadyOrNot PRIVATE -Wa,-mbig-obj)
 endif ()
 
 # Disable warnings as errors (optional)
-set_property(TARGET Strinova PROPERTY COMPILE_WARNING_AS_ERROR OFF)
+set_property(TARGET ReadyOrNot PROPERTY COMPILE_WARNING_AS_ERROR OFF)
 
-# Add compiler definitions for Windows specifics
-add_compile_definitions(Strinova 
+# Add compiler definitions for Windows specifics (every target here, the SDK included). A target name must not go
+# first: it would become a macro, and "ReadyOrNot" is the SDK's own namespace.
+add_compile_definitions(
     "_CRT_SECURE_NO_WARNINGS"
     "NOMINMAX"
     "WIN32_LEAN_AND_MEAN"
 )
 
-set_target_properties(Strinova PROPERTIES OUTPUT_NAME "version")
+set_target_properties(ReadyOrNot PROPERTIES OUTPUT_NAME "version")
 # Add the 'injector' subdirectory
 add_subdirectory(injector)

@@ -1,5 +1,6 @@
 #include "commands.hpp"
 #include "command.hpp"
+#include "bool_command.hpp"
 #include "looped_command.hpp"
 #include "process_event/process_event.hpp"
 
@@ -51,6 +52,14 @@ namespace big
 		return nullptr;
 	}
 	
+	bool_command* commands::get_bool_command_impl(joaat_t hash)
+	{
+		for (auto command : m_bool_commands)
+			if (command->get_hash() == hash)
+				return command;
+		return nullptr;
+	}
+
 	process_event* commands::get_process_event_impl(joaat_t hash)
 	{
 		if (auto it = m_process_event_commands.find(hash); it != m_process_event_commands.end())
@@ -75,6 +84,25 @@ namespace big
 		{
 			if (state.contains(command.second->get_name()))
 				command.second->load_state(state[command.second->get_name()]);
+		}
+	}
+
+	void commands::apply_external_impl(nlohmann::json& state, const nlohmann::json& changes)
+	{
+		for (const auto& [name, value] : changes.items())
+		{
+			const auto hash = joaat(name);
+			if (auto toggle = get_bool_command_impl(hash))
+			{
+				// set_state, not load_state, so the feature switches on or off exactly like a menu click.
+				if (value.is_boolean() && toggle->get_state() != value.get<bool>())
+					toggle->set_state(value.get<bool>());
+			}
+			else if (auto command = get_command_impl(hash); command && !value.is_null())
+			{
+				auto copy = value;
+				command->load_state(copy);
+			}
 		}
 	}
 

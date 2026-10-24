@@ -18,12 +18,13 @@ namespace big
 			m_state = value;
 		};
 
-		int m_state = 0;
+		// NumberType, not int: a float command such as the aimbot FOV kept only whole numbers before.
+		NumberType m_state{};
 		NumberType m_min;
 		NumberType m_max;
 
 	public:
-		number_command(std::string name, std::string label, std::string description, NumberType min, NumberType max, int def_val = 0) :
+		number_command(std::string name, std::string label, std::string description, NumberType min, NumberType max, NumberType def_val = {}) :
 			command(name, label, description, 0),
 			m_min(min),
 			m_max(max),
@@ -31,10 +32,10 @@ namespace big
 		{
 		}
 		NumberType get_state() { return m_state; };
-		void set_state(int state)
+		void set_state(NumberType state)
 		{
-			on_change();
 			m_state = state;
+			on_change();
 			mark_dirty();
 		};
 		NumberType get_minimum()

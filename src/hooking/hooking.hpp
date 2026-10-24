@@ -1,5 +1,4 @@
 #pragma once
-#include "MinHook.h"
 #include "common.hpp"
 #include "renderer.hpp"
 #include "detour_hook.hpp"
@@ -19,6 +18,10 @@ namespace big
 		static HRESULT APIENTRY swapchain_resizebuffers(IDXGISwapChain* this_, UINT buffer_count, UINT width, UINT height, DXGI_FORMAT new_format, UINT swapchain_flags);
 		static void APIENTRY swapchain_draw_indexed(ID3D11DeviceContext* pContext, UINT IndexCount, UINT StartIndexLocation, INT BaseVertexLocation);
 
+		static HRESULT APIENTRY swapchain_present12(IDXGISwapChain* swapchain, UINT interval, UINT flags);
+		static HRESULT APIENTRY swapchain_resizebuffers12(IDXGISwapChain* swapchain, UINT count, UINT width, UINT height, DXGI_FORMAT format, UINT flags);
+		static void STDMETHODCALLTYPE execute_command_lists(ID3D12CommandQueue* queue, UINT count, ID3D12CommandList* const* lists);
+
 		static LRESULT wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 		static BOOL set_cursor_pos(int x, int y);
 		static void* convert_thread_to_fiber(void* param);
@@ -34,18 +37,6 @@ namespace big
 		static int64_t eval_caller(int64_t* a1);
 	};
 
-	struct minhook_keepalive
-	{
-		minhook_keepalive()
-		{
-			MH_Initialize();
-		}
-		~minhook_keepalive()
-		{
-			MH_Uninitialize();
-		}
-	};
-
 	class hooking
 	{
 		friend hooks;
@@ -56,8 +47,10 @@ namespace big
 		void enable();
 		void disable();
 	private:
+		// Deletes every hook that came off; a hook still in place stays alive for whoever calls into it.
+		static void delete_disabled_hooks();
+
 		bool m_enabled{};
-		minhook_keepalive m_minhook_keepalive;
 
 		WNDPROC m_og_wndproc;
 #ifndef UNIVERSAL

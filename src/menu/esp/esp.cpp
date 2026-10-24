@@ -7,95 +7,7 @@
 
 namespace big
 {
-    static bool is_skeleton_variant_2(SDK::USkeletalMeshComponent* mesh)
-    {
-        if (!mesh) return false;
-
-        auto name = mesh->GetBoneName(45).ToString();
-        return name == "Head";
-    }
-
-    static void draw_bone(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, int a, int b, Color color)
-    {
-        if (!actor || !controller) return;
-
-        SDK::FVector a_world, b_world;
-
-        if (!unreal_engine::get_bone_world(actor, a, a_world)) return;
-        if (!unreal_engine::get_bone_world(actor, b, b_world)) return;
-
-        SDK::FVector2D a_screen, b_screen;
-
-        if (!controller->ProjectWorldLocationToScreen(a_world, &a_screen, false))
-            return;
-
-        if (!controller->ProjectWorldLocationToScreen(b_world, &b_screen, false))
-            return;
-
-        canvas::draw_line(
-            a_screen.X, a_screen.Y,
-            b_screen.X, b_screen.Y,
-            color, 1.f
-        );
-    }
-    static void draw_skeleton(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color const& colour)
-    {
-        if (!target || !controller)
-        {
-            LOG(FATAL) << "[draw_skeleton] AActor is null 0x" << std::hex << std::uppercase << target << " or APlayerController is null 0x" << std::hex << std::uppercase << controller;
-            return;
-        }
-
-        auto mesh = target->Mesh;
-        if (!mesh) return;
-
-        bool variant2 = is_skeleton_variant_2(mesh);
-
-        auto team = target->DefaultTeam;
-
-        const auto& skeleton =
-            team == SDK::ETeamType::TT_SUSPECT
-            ? (variant2 ? suspect_skel_2 : suspect_skel_1)
-            : (variant2 ? civ_skel_2 : civ_skel_1);
-
-        for (const auto& [p, c] : skeleton)
-        {
-            draw_bone(target, controller, p, c, colour);
-        }
-    }
-    static void draw_box3d(SDK::AReadyOrNotCharacter* target, SDK::APlayerController* controller, Color col)
-    {
-        if (!target || !controller)
-        {
-            LOG(FATAL) << "[draw_box3d] AActor is null 0x" << std::hex << std::uppercase << target << " or APlayerController is null 0x" << std::hex << std::uppercase << controller;
-
-            return;
-        }
-
-        SDK::FVector origin, extent;
-        target->GetActorBounds(true, &origin, &extent, false);
-
-        SDK::FVector top = unreal_engine::get_location_bone(target, L"Head");
-        SDK::FVector bottom = unreal_engine::get_location_bone(target, EBonesIndex::Root);
-
-        SDK::FVector2D top2D, bottom2D;
-
-        top.Z += 15.f;
-
-        if (!controller->ProjectWorldLocationToScreen(top, &top2D, false))
-            return;
-
-        if (!controller->ProjectWorldLocationToScreen(bottom, &bottom2D, false))
-            return;
-
-        float height = fabs(bottom2D.Y - top2D.Y);
-        float width = height * 0.45f;
-
-        float x = bottom2D.X - width / 2.f;
-        float y = top2D.Y;
-
-        canvas::draw_corner_box(x, y, width, height, 1.5f, col);
-    }
+    // Runs on the render thread: reads only what entity_event projected on the game thread, plus a few plain fields.
     static void draw_aimbot_fov(SDK::APlayerController* controller = unreal_engine::get_player_controller())
     {
         if (!controller || !controller->PlayerCameraManager)
@@ -104,13 +16,16 @@ namespace big
         auto fov_cmd = commands::get_command<number_command<float>>("aimbot_fov"_hash);
         if (!fov_cmd) return;
 
-        auto pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
+        const auto& pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
 
         float aimbot_fov_deg = fov_cmd->get_state();
         float camera_fov_deg = pov.FOV;
+        if (camera_fov_deg <= 1.f)
+            return;
 
-        int screen_w, screen_h;
-        controller->GetViewportSize(&screen_w, &screen_h);
+        const auto display = ImGui::GetIO().DisplaySize;
+        float screen_w = display.x;
+        float screen_h = display.y;
 
         float center_x = screen_w * 0.5f;
         float center_y = screen_h * 0.5f;
@@ -155,29 +70,42 @@ namespace big
         // vertikal
         line(0, 4); line(1, 5); line(2, 6); line(3, 7);
     }
+    // A vertical bar left of the box: green at full health, turning red as it drops.
+    static void draw_health(const esp_data& data)
+    {
+        if (!data.has_box || data.max_health <= 0.f || data.box_h <= 1.f)
+            return;
+
+        const float ratio = std::clamp(data.health / data.max_health, 0.f, 1.f);
+        const float filled = data.box_h * ratio;
+        const float x = data.box_x - 6.f;
+
+        canvas::draw_line(x, data.box_y, x, data.box_y + data.box_h, { 0, 0, 0, 255 }, 3.f);
+
+        const Color color{
+            static_cast<std::uint8_t>((1.f - ratio) * 255),
+            static_cast<std::uint8_t>(ratio * 255),
+            0,
+            255 };
+        canvas::draw_line(x, data.box_y + data.box_h - filled, x, data.box_y + data.box_h, color, 2.f);
+    }
     void esp::draw_esp()
 	{
-        float width = static_cast<float>(g_pointers->m_resolution->x / 2);
-        float height = static_cast<float>(g_pointers->m_resolution->y / 2);
-
-        static const Color white = { 255, 255, 255, 255 };
-
         if (features::_draw_fov.get_state())
             draw_aimbot_fov();
 
         if (!features::_esp_enabled.get_state())
             return;
 
+        const auto display = ImGui::GetIO().DisplaySize;
+        const float width = display.x * 0.5f;
+
+        static const Color white = { 255, 255, 255, 255 };
+
+        // Holds the buffer for the whole draw, so the game thread cannot recycle it underneath.
         const auto view = g_esp_data.view();
 
-        if (!view)
-        {
-            LOG(FATAL) << "View data is empty";
-
-            return;
-        }
-
-        for (const auto& data : *view)
+        for (const auto& data : view)
         {
             if (features::_draw_line.get_state())
                 canvas::draw_line(width, 0, data.screen.X, data.screen.Y, data.color, 1.f);
@@ -194,6 +122,8 @@ namespace big
                 canvas::draw_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);
             if (features::_draw_box_3d.get_state() && data.has_box_3d)
                 draw_box_3d(data.box_3d, data.color);
+            if (features::_draw_health.get_state())
+                draw_health(data);
             if (features::_draw_name.get_state())
             {
                 canvas::draw_stroke_text(data.screen.X, data.screen.Y, data.color, data.display_text);

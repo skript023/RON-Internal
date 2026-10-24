@@ -8,7 +8,7 @@
 #include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weapon_backup.hpp"
 
 namespace big
 {
@@ -41,16 +41,16 @@ namespace big
 		bool bUseFireLoopAnims;
 	};
 
-	static std::unordered_map<SDK::ABaseMagazineWeapon*, recoil_backup> g_backup;
+	static weapon_backup<recoil_backup> g_backup;
 
 	static void backup_weapon(SDK::ABaseMagazineWeapon* wep)
 	{
 		if (!wep) return;
 
 		// kalau belum pernah dibackup
-		if (g_backup.find(wep) == g_backup.end())
+		if (!g_backup.contains(wep))
 		{
-			g_backup[wep] = {
+			g_backup.add(wep, {
 				wep->RecoilMultiplierPitch,
 				wep->RecoilMultiplierYaw,
 				wep->FirstShotRecoil,
@@ -76,7 +76,7 @@ namespace big
 
 				wep->bCalculateProcRecoil,
 				wep->bUseFireLoopAnims
-			};
+			});
 		}
 	}
 
@@ -113,8 +113,9 @@ namespace big
 
 	static void restore_all()
 	{
-		for (auto& [wep, data] : g_backup)
+		for (auto& [weapon, data] : g_backup)
 		{
+			auto wep = weapon.get();
 			if (!wep) continue;
 
 			wep->RecoilMultiplierPitch = data.RecoilMultiplierPitch;
@@ -168,6 +169,8 @@ namespace big
 			{
 				if (auto wep = c->GetEquippedWeapon())
 				{
+					// A weapon switched to while the feature is on is backed up before it changes too.
+					backup_weapon(wep);
 					apply_no_recoil(wep);
 				}
 			}
@@ -179,5 +182,5 @@ namespace big
 		}
 	};
 
-	static no_recoil _no_recoil("no_recoil", "No Recoil", "");
+	static no_recoil _no_recoil("no_recoil", "No Recoil", "Removes recoil and weapon sway");
 }

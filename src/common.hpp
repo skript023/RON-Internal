@@ -66,6 +66,9 @@
 
 #define GAME "ReadyOrNotSteam-Win64-Shipping.exe"
 #define GAME_NAME "Ready Or Not"
+// The mod's folder in the game's install folder, where the Astra loader reads its settings.
+#define MOD_FOLDER_NAME "ReadyOrNot Mod"
+// Where earlier builds kept their files, under %APPDATA%.
 #define FOLDER_NAME "ReadyOrNot"
 #define LOG_NAME "ReadyOrNot.log"
 #define LOG_EVENT_NAME "ReadyOrNotEvent.log"
@@ -97,6 +100,5 @@ namespace big
 	inline HANDLE g_main_thread{};
 	inline DWORD g_main_thread_id{};
 	inline std::atomic_bool g_running{ true };
-	inline std::atomic_bool g_should_trigger{ false };
 	inline int64_t* g_eval_param = nullptr;
 }

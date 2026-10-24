@@ -1,4 +1,5 @@
 #pragma once
+#include "task.hpp"
 
 namespace big
 {
@@ -6,6 +7,6 @@ namespace big
 	{
 	public:
 		static void registration();
-		static void run();
+		static task<void> run();
 	};
 }

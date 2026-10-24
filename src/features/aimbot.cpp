@@ -264,8 +264,6 @@ namespace big
 					controller->SetControlRotation(smoothed);
 				}
 			}
-
-			g_should_trigger = false;
 		}
 	};
 

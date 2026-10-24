@@ -1,5 +1,6 @@
 #include "../view.hpp"
 #include "pointers.hpp"
+#include "fiber_pool.hpp"
 
 #include "imgui.h"
 #include "input/input_service.hpp"
@@ -9,11 +10,22 @@ namespace big
 {
 	void view::draw_input()
 	{
-		if (!g_settings.window.input)
+		// The player's input is switched on the game thread, once when the box opens and once when it closes.
+		static bool was_open = false;
+		const bool open = g_settings.window.input;
+		if (open != was_open)
 		{
-			unreal_engine::enable_input();
-			return;
+			was_open = open;
+			g_fiber_pool->queue_job([open] {
+				if (open)
+					unreal_engine::disable_input();
+				else
+					unreal_engine::enable_input();
+			});
 		}
+
+		if (!open)
+			return;
 
 		float screen_x = (float)g_pointers->m_resolution->x;
 		float screen_y = (float)g_pointers->m_resolution->y;
@@ -24,9 +36,8 @@ namespace big
 
 		if (ImGui::Begin("Input", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav))
 		{
-			unreal_engine::disable_input();
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 10.f, 15.f });
-			ImGui::Text(g_input_service.m_title);
+			ImGui::TextUnformatted(g_input_service.m_title);
 			// set focus by default on input box
 			ImGui::SetKeyboardFocusHere(0);
 			ImGui::SetNextItemWidth((screen_x * 0.5f) - 30.f);

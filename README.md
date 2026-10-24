@@ -1,39 +1,51 @@
 <p align="center"><a title="Jeremy Kratz, Public domain, via Wikimedia Commons" href="https://commons.wikimedia.org/wiki/File:ISO_C%2B%2B_Logo.svg"><img width="256" alt="ISO C++ Logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/ISO_C%2B%2B_Logo.svg/256px-ISO_C%2B%2B_Logo.svg.png"></a></p>
 
-<h1 align="center">Scarlet Nexus Trainer Internal</h1>
+<h1 align="center">Ready Or Not Internal</h1>
 <p align="center">
-  <a href="https://github.com/skript023/Scarlet-Nexus-Internal/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/skript023/Scarlet-Nexus-Internal.svg?style=flat-square"/>
-   </a>
-  <a href="https://github.com/skript023/Scarlet-Nexus-Internal/actions">
-      <img src="https://img.shields.io/github/actions/workflow/status/skript023/Scarlet-Nexus-Internal/main.yml?branch=main&style=flat-square"/>
-   </a>
-  <br>
-  A trainer menu base Scarlet Nexus Trainer.
+  An internal trainer for Ready Or Not, built on the shared <a href="https://github.com/skript023/astra-ui">Astra UI</a> menu.
   Strictly for educational purposes.
 </p>
 
 ## Features
-* ImGui�based user interface
-* Log console
-* Unreal Classes
-* Native Function Access
-* Fiber Pool
-* Thread Pool
-* Unload at runtime
 
-## Bugs
-* Trainer window will not show if you have overlay hooked for example MSI Afterburner and something like that.
+Mission actions change what the host decides, so they work in single player or as the lobby host; as a client they show a notice instead.
 
+| Tab | Features |
+| --- | --- |
+| Self | Godmode, Infinite Ammo, Add Magazine, Instant Kill, No Recoil, No Spread, Wall Penetration, Walk Speed |
+| Mission | Mission Tracker overlay, Target Inspector, Collectibles panel, Objective Alerts; Auto Win, Arrest All, Surrender or Knock Out Suspects, Report All, Collect All Evidence, Unlock All Doors, Disarm All Traps, Remove Door Wedges, Teleport to Next AI |
+| World | Slow Motion, Damage Multiplier, Freeze AI, AI Hold Fire, Objective and Evidence Markers, Infinite Squad Items, Reset Squad Stress |
+| ESP | Suspects, civilians, SWAT, traps, evidence, reportables, and collectibles, with name, line, health bar, box, corner box, 3D box, and skeleton, up to a maximum distance |
+| Aimbot | Aimbot, silent aim, triggerbot, FOV circle |
+| Teleport | Teleport forward and saved locations by category |
+| Settings | Astra's shared settings (layout, theme, banner, transparency, menu keys) plus Debug, Reload, Unload, Exit |
+
+Every toggle is saved in `settings.json` in the `ReadyOrNot Mod` folder inside the game's install folder (for example `steamapps\common\Ready Or Not\ReadyOrNot Mod`), next to `menu_settings.json`, the saved teleports, and the log. The first start copies these files once from `%APPDATA%\ReadyOrNot`, where earlier builds kept them. The Astra loader reads the same folder, so it can switch features and set per-feature hotkeys while the game runs.
+
+World toggles use the game's own debug subsystem. Where a shipping build left a toggle's body out, the feature writes the flag the game reads instead; check each one in game.
+
+## How it runs
+
+- The menu draws on DX11 directly and on DX12, the game's default, through D3D11On12 on the game's direct queue, which `ExecuteCommandLists` captures.
+- Hooks (swapchain Present and ResizeBuffers for DX11 and DX12, ExecuteCommandLists, ProcessEvent, SetCursorPos) use [Ellohim-Hook](https://github.com/skript023/Ellohim-Hook), the same hooking library as the Valheim trainer. A hook another program still covers on unload stays in place, and the DLL stays loaded rather than crash the game.
+- Everything that reads or calls the engine runs on the game thread, in C++20 coroutine tasks (`task.hpp`, `task_mgr`) resumed once per frame from `Engine.ActorComponent.ReceiveTick`, the same task system as the Valheim trainer. `g_fiber_pool->queue_job` still works and queues a task for the next tick. The render thread only draws.
+- The ESP worker (`events/entity_event.cpp`) projects targets on the game thread and hands them to the renderer through a triple buffer.
+- The mission worker (`events/mission_event.cpp`) reads the mission a few times a second for the tracker, the inspector, the collectibles list, and objective alerts.
 
 ## Building
-To build Scarlet Nexus Internal you need:
-* Visual Studio 2022
-* [Premake 5.0](https://premake.github.io/download.html) in your PATH
 
-To set up the build environment, run the following commands in a terminal:
-```dos
-git clone https://github.com/skript023/Scarlet-Nexus-Internal.git --recurse-submodules
-GenerateProjects.bat
+You need Visual Studio 2022 with Desktop development with C++ (it ships CMake and Ninja), and Git on `PATH`.
+
+1. Put the OpenSSL build in `openssl/` (`openssl/include` and `openssl/lib` with `libssl.lib`, `libcrypto.lib`, `zlib.lib`). The folder is ignored by Git.
+2. Open the folder in Visual Studio and build the `x64-Release` configuration, or from a Developer Command Prompt:
+
+```bat
+cmake -S . -B out/build/x64-Release -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build out/build/x64-Release --target ReadyOrNot
 ```
-Now, you will be able to open the solution, and simply build it in Visual Studio.
+
+The output is `version.dll`. CMake fetches its dependencies on the first configure, including the SDK and Astra UI; pass `-DFETCHCONTENT_SOURCE_DIR_SDK=<path>` or `-DFETCHCONTENT_SOURCE_DIR_ASTRA=<path>` to build against a local checkout instead.
+
+## Bugs
+
+- The trainer window does not show while another overlay hooks the swapchain, such as MSI Afterburner.

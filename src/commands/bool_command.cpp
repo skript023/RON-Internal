@@ -33,10 +33,21 @@ namespace big
 
 	void bool_command::set_state(bool state)
 	{
-		if (state && !m_state)
-			on_enable();
-		else if (!state && m_state)
-			on_disable();
+		if (state != m_state)
+		{
+			// The menu switches toggles from the render thread; the game is only touched from the game thread.
+			auto apply = [this, state] {
+				if (state)
+					on_enable();
+				else
+					on_disable();
+			};
+
+			if (g_fiber_pool)
+				g_fiber_pool->queue_job(std::move(apply));
+			else
+				apply();
+		}
 
 		m_state = state;
 

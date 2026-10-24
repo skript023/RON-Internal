@@ -16,7 +16,7 @@ namespace big
 
 		bool load();
 	private:
-		const char* settings_location = "\\" FOLDER_NAME "\\menu_settings.json";
+		static std::filesystem::path get_file_path();
 
 		bool deep_compare(nlohmann::json& current_settings, const nlohmann::json& default_settings, bool compare_value = false);
 		bool save();
@@ -56,12 +56,19 @@ namespace big
 		{
 			ImU32 color = 3357612055;
 			float gui_scale = 1.f;
+			float transparency = 1.f;
+			Color custom_background{ 8, 12, 20, 255 };
+			Color custom_panel{ 15, 24, 38, 255 };
+			Color custom_text{ 225, 235, 250, 255 };
 
 			ImFont* font_title = nullptr;
 			ImFont* font_sub_title = nullptr;
 			ImFont* font_small = nullptr;
 			ImFont* font_icon = nullptr;
 
+			int layout = 0; // 0: List, 1: Window
+			int theme = 4;  // Index into astra::preset_theme_names.
+			int banner = 0; // Index into astra::banners().
 			bool switched_view = true;
 			bool mouse_active = false;
 			bool input = false;
@@ -120,9 +127,16 @@ namespace big
 			Color m_slider_track_color = { 255, 255, 255, 255 };
 			Color m_slider_knob_color = { 0, 0, 0, 255 };
 
-			NLOHMANN_DEFINE_TYPE_INTRUSIVE(window, 
-				color, 
-				gui_scale, 
+			NLOHMANN_DEFINE_TYPE_INTRUSIVE(window,
+				layout,
+				theme,
+				banner,
+				color,
+				gui_scale,
+				transparency,
+				custom_background,
+				custom_panel,
+				custom_text,
 				mouse_active, 
 				censor, 
 				overlay,

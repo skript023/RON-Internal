@@ -3,10 +3,17 @@
 namespace big
 {
 	detour_base::detour_base(const std::string_view name) :
-		m_name(name),
-		m_enabled(false)
+	    m_name(name),
+	    m_enabled(false)
 	{
 		m_detour_bases.emplace_back(this);
+	}
+
+	detour_base::~detour_base()
+	{
+		if (m_clear_binding)
+			m_clear_binding(this);
+		std::erase(m_detour_bases, this);
 	}
 
 	std::vector<detour_base*>& detour_base::hooks()

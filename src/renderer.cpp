@@ -233,12 +233,6 @@ namespace big
 
 		canvas::prepare_imgui_mouse();
 		canvas::apply_panel_theme();
-		auto& io = ImGui::GetIO();
-		io.MouseDrawCursor = canvas::uses_mouse();
-		if (canvas::uses_mouse())
-			io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
-		else
-			io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
 
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();

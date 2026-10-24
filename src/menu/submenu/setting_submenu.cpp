@@ -1,6 +1,6 @@
 #include "../view.hpp"
 #include "../core/submenu.hpp"
-#include "fiber_pool.hpp"
+#include "task_mgr.hpp"
 #include "utility/unreal_engine_utility.hpp"
 
 namespace big
@@ -21,7 +21,7 @@ namespace big
         {
             sub->add_option<bool_option<bool>>("Logging Process Event", nullptr, &g_settings.debug.logging_process_event);
             sub->add_option<reguler_option>("Log Player Bones", nullptr, [] {
-                g_fiber_pool->queue_job([] {
+                async_run([] {
                     auto character = unreal_engine::get_character();
 
                     if (!character)

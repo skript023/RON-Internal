@@ -2,7 +2,7 @@
 #include "command.hpp"
 #include "commands.hpp"
 
-#include "fiber_pool.hpp"
+#include "task_mgr.hpp"
 
 namespace big
 {
@@ -18,7 +18,7 @@ namespace big
 
 	void command::call()
 	{
-		g_fiber_pool->queue_job([this] {
+		async_run([this] {
 			on_call();
 		});
 	}

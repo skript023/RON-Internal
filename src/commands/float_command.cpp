@@ -1,5 +1,5 @@
 #include "float_command.hpp"
-#include "fiber_pool.hpp" // TODO: game import in core
+#include "task_mgr.hpp"
 
 namespace big
 {
@@ -32,7 +32,7 @@ namespace big
 
 	void float_command::set_state(float state)
 	{
-		g_fiber_pool->queue_job([this] { on_change(); });
+		async_run([this] { on_change(); });
 		m_state = state;
 		mark_dirty();
 	}

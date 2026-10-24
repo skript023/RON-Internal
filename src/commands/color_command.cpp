@@ -1,5 +1,5 @@
 #include "color_command.hpp"
-#include "fiber_pool.hpp" // TODO: game import in core
+#include "task_mgr.hpp"
 
 namespace big
 {
@@ -37,7 +37,7 @@ namespace big
 
 	void color_command::set_color_state(ImVec4 state)
 	{
-		g_fiber_pool->queue_job([this] { on_change(); });
+		async_run([this] { on_change(); });
 
 		m_color_state = state;
 

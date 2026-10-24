@@ -1,5 +1,5 @@
 #include "bool_command.hpp"
-#include "fiber_pool.hpp" // TODO: game import in core
+#include "task_mgr.hpp"
 #include "commands.hpp"
 
 namespace big
@@ -43,10 +43,7 @@ namespace big
 					on_disable();
 			};
 
-			if (g_fiber_pool)
-				g_fiber_pool->queue_job(std::move(apply));
-			else
-				apply();
+			async_run(std::move(apply));
 		}
 
 		m_state = state;

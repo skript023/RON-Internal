@@ -28,7 +28,7 @@ World toggles use the game's own debug subsystem. Where a shipping build left a 
 
 - The menu draws on DX11 directly and on DX12, the game's default, through D3D11On12 on the game's direct queue, which `ExecuteCommandLists` captures.
 - Hooks (swapchain Present and ResizeBuffers for DX11 and DX12, ExecuteCommandLists, ProcessEvent, SetCursorPos) use [Ellohim-Hook](https://github.com/skript023/Ellohim-Hook), the same hooking library as the Valheim trainer. A hook another program still covers on unload stays in place, and the DLL stays loaded rather than crash the game.
-- Everything that reads or calls the engine runs on the game thread, in C++20 coroutine tasks (`task.hpp`, `task_mgr`) resumed once per frame from `Engine.ActorComponent.ReceiveTick`, the same task system as the Valheim trainer. `g_fiber_pool->queue_job` still works and queues a task for the next tick. The render thread only draws.
+- Everything that reads or calls the engine runs on the game thread, in C++20 coroutine tasks (`task.hpp`, `task_mgr`) resumed once per frame from `Engine.ActorComponent.ReceiveTick`, the same task system as the Valheim trainer. The menu and commands hand work to the game thread with `async_run`, which queues a task for the next tick. The render thread only draws.
 - The ESP worker (`events/entity_event.cpp`) projects targets on the game thread and hands them to the renderer through a triple buffer.
 - The mission worker (`events/mission_event.cpp`) reads the mission a few times a second for the tracker, the inspector, the collectibles list, and objective alerts.
 

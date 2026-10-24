@@ -1,6 +1,6 @@
 #include "mission_event.hpp"
 #include "script.hpp"
-#include "fiber_pool.hpp"
+#include "task_mgr.hpp"
 #include "features/mission.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
@@ -457,7 +457,7 @@ namespace big
 			door = g_shared.door;
 		}
 
-		g_fiber_pool->queue_job([action, character, door] {
+		async_run([action, character, door] {
 			if (!ron::require_host("Target Inspector"))
 				return;
 
@@ -479,7 +479,7 @@ namespace big
 
 	void mission_event::teleport(const SDK::FVector& location)
 	{
-		g_fiber_pool->queue_job([location] {
+		async_run([location] {
 			auto destination = location;
 			destination.Z += 100.f;
 			player::set_player_coords(destination, player::get_player_rotation());

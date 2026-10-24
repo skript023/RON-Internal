@@ -1,6 +1,6 @@
 #include "../view.hpp"
 #include "pointers.hpp"
-#include "fiber_pool.hpp"
+#include "task_mgr.hpp"
 
 #include "imgui.h"
 #include "input/input_service.hpp"
@@ -16,7 +16,7 @@ namespace big
 		if (open != was_open)
 		{
 			was_open = open;
-			g_fiber_pool->queue_job([open] {
+			async_run([open] {
 				if (open)
 					unreal_engine::disable_input();
 				else

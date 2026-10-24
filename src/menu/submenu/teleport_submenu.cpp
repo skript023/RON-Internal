@@ -1,7 +1,7 @@
 #include "../view.hpp"
 #include "../core/submenu.hpp"
 
-#include "fiber_pool.hpp"
+#include "task_mgr.hpp"
 #include "utility/player.hpp"
 #include "input/input_service.hpp"
 #include <custom_teleport/custom_teleport_service.hpp>
@@ -41,7 +41,7 @@ namespace big
 		canvas::add_tab<regular_submenu>("Teleport", SubmenuTeleport, [](regular_submenu* sub)
 		{
 			sub->add_option<reguler_option>("Teleport Forward", "Moves you a few metres ahead", [] {
-				g_fiber_pool->queue_job([] { player::teleport_forward(); });
+				async_run([] { player::teleport_forward(); });
 			});
 			sub->add_option<reguler_option>("Save Current Location", "Saves where you stand on this map under a name", [] {
 				g_input_service.show("Location name", [](std::string const& input) {
@@ -83,7 +83,7 @@ namespace big
 			if (clicked.row >= 0 && clicked.action == 0)
 			{
 				const auto location = saved[clicked.row];
-				g_fiber_pool->queue_job([location] {
+				async_run([location] {
 					player::set_player_coords(SDK::FVector(location.x, location.y, location.z + 100.f), SDK::FRotator(location.pitch, location.yaw, location.roll));
 				});
 			}

@@ -7,7 +7,7 @@
 #include "benchmark.hpp"
 #include "thread_pool.hpp"
 #include "task_mgr.hpp"
-#include <astra/host/settings.hpp>
+#include "settings/settings.hpp"
 #include "commands/commands.hpp"
 
 #include "events/main_event.hpp"

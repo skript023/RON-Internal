@@ -3,9 +3,8 @@
 #include "pointers.hpp"
 #include "commands/commands.hpp"
 #include "commands/bool_command.hpp"
-
-#include <astra/host/hotkeys.hpp>
-#include <astra/host/settings.hpp>
+#include "settings/hotkeys.hpp"
+#include "settings/settings.hpp"
 
 namespace big
 {

@@ -49,12 +49,11 @@ file(GLOB_RECURSE SRC_MAIN
 
 add_library(ReadyOrNot MODULE "${SRC_MAIN}")  # Use STATIC or SHARED depending on requirements
 
-# The Astra host parts every game shares: menu canvas, notifications, settings.json live reload, and feature hotkeys.
+# The Astra host parts: menu canvas and notifications. settings.json, its live reload and the feature hotkeys come
+# from src/settings instead of Astra's host/settings.cpp and host/hotkeys.cpp, which declare the same classes.
 target_sources(ReadyOrNot PRIVATE
     "${astra_SOURCE_DIR}/host/canvas.cpp"
     "${astra_SOURCE_DIR}/host/notification.cpp"
-    "${astra_SOURCE_DIR}/host/settings.cpp"
-    "${astra_SOURCE_DIR}/host/hotkeys.cpp"
 )
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)

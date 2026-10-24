@@ -130,6 +130,23 @@ DWORD APIENTRY main_thread(LPVOID)
 			std::this_thread::sleep_for(1s);
 		}
 
+		{
+			auto pending = std::make_shared<std::atomic_bool>(true);
+			async_run([pending] {
+				commands::shutdown();
+				async_run([pending] {
+					pending->store(false);
+				});
+			});
+			const auto deadline = std::chrono::steady_clock::now() + 2s;
+			while (pending->load() && std::chrono::steady_clock::now() < deadline)
+				std::this_thread::sleep_for(10ms);
+			if (pending->load())
+				LOG(WARNING) << "Game thread unavailable to turn off looped features before unload.";
+			else
+				LOG(INFO) << "Looped features turned off.";
+		}
+
 		g_hooking->disable();
 		LOG(INFO) << "Hooking disabled.";
 

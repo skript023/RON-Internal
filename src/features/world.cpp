@@ -54,15 +54,122 @@ namespace big
 		toggler_t m_toggle;
 	};
 
-	static debug_toggle _freeze_ai("freeze_ai", "Freeze AI", "AI stop moving",
-	    [](debug_subsystem* s) -> bool { return s->bDisableAIMovement; },
-	    [](debug_subsystem* s, bool on) { s->bDisableAIMovement = on; },
-	    [](debug_subsystem* s) { s->ToggleAIMovement(); });
+	// The debug subsystem's AI movement and AI targeting switches did nothing in the shipping game, so these two work on
+	// the characters themselves.
 
-	static debug_toggle _ai_ignore("ai_ignore", "AI Hold Fire", "AI stop picking targets",
-	    [](debug_subsystem* s) -> bool { return s->bDisableAITargeting; },
-	    [](debug_subsystem* s, bool on) { s->bDisableAITargeting = on; },
-	    [](debug_subsystem* s) { s->ToggleAITargeting(); });
+	// Suspects and civilians stop moving: movement off on each one, back to walking afterwards. AI moves on the host,
+	// so only the host freezes it; the squad keeps moving.
+	class freeze_ai : public looped_command
+	{
+		using looped_command::looped_command;
+
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_frozen;
+
+		void on_tick() override
+		{
+			if (!ron::is_host())
+				return;
+
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->IsA(SDK::ASWATCharacter::StaticClass()) || !ron::is_active(ai))
+					return;
+
+				auto movement = ai->CharacterMovement;
+				if (!movement || movement->MovementMode == SDK::EMovementMode::MOVE_None)
+					return;
+
+				movement->DisableMovement();
+				m_frozen.emplace_back(ai);
+			});
+		}
+
+		void on_disable() override
+		{
+			for (const auto& entry : m_frozen)
+			{
+				auto ai = entry.get();
+				if (ai && ron::is_active(ai) && ai->CharacterMovement && ai->CharacterMovement->MovementMode == SDK::EMovementMode::MOVE_None)
+					ai->CharacterMovement->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0);
+			}
+			m_frozen.clear();
+		}
+	};
+
+	static freeze_ai _freeze_ai("freeze_ai", "Freeze AI", "Suspects and civilians stop moving (host only)");
+
+	// Suspects pick no target: the player's own no-target cheat, toggled the way god mode is, and the same flag on the
+	// squad. The host decides who the AI may target, so there the flags alone are enough even if the toggle did nothing.
+	class ai_hold_fire : public looped_command
+	{
+		using looped_command::looped_command;
+
+		// The pawn this feature last toggled, so a respawned pawn is toggled again but the same one is not toggled twice.
+		weak_object<SDK::APlayerCharacter> m_toggled;
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_squad;
+
+		static void toggle(SDK::APlayerCharacter* c, SDK::APlayerController* controller)
+		{
+			if (controller->HasAuthority())
+				c->Server_ToggleNoTarget();
+			else
+				c->ToggleNoTarget();
+		}
+
+		void on_enable() override
+		{
+			m_toggled = {};
+			on_tick();
+		}
+
+		void on_tick() override
+		{
+			auto controller = unreal_engine::get_player_controller();
+			auto c = unreal_engine::get_character();
+			if (!c || !controller)
+				return;
+
+			if (!c->bNoTarget && m_toggled.get() != c)
+			{
+				toggle(c, controller);
+				m_toggled = c;
+			}
+
+			if (!controller->HasAuthority())
+				return;
+
+			c->bNoTarget = true;
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->IsA(SDK::ASWATCharacter::StaticClass()) && !ai->bNoTarget)
+				{
+					ai->bNoTarget = true;
+					m_squad.emplace_back(ai);
+				}
+			});
+		}
+
+		void on_disable() override
+		{
+			auto controller = unreal_engine::get_player_controller();
+			auto c = unreal_engine::get_character();
+			m_toggled = {};
+
+			if (c && controller && c->bNoTarget)
+			{
+				toggle(c, controller);
+				if (c->bNoTarget && controller->HasAuthority())
+					c->bNoTarget = false;
+			}
+
+			for (const auto& member : m_squad)
+			{
+				if (auto ai = member.get())
+					ai->bNoTarget = false;
+			}
+			m_squad.clear();
+		}
+	};
+
+	static ai_hold_fire _ai_ignore("ai_ignore", "AI Hold Fire", "Suspects target neither you nor your squad");
 
 	static debug_toggle _objective_markers("objective_markers", "Objective Markers", "The game's markers on every objective",
 	    [](debug_subsystem* s) -> bool { return s->bShowObjectiveMarkers; },

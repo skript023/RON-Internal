@@ -20,6 +20,7 @@ namespace big
             sub->add_option<bool_option<bool>>("no_spread"_hash);
             sub->add_option<bool_option<bool>>("penetrate_wall"_hash);
             sub->add_option<bool_option<bool>>("instant_lockpick"_hash);
+            sub->add_option<bool_option<bool>>("instant_cuff"_hash);
             sub->add_option<bool_slider_float_option>("walk_speed"_hash, "walk_mult"_hash, 0.1f);
             sub->add_option<sub_option>("Online Players", nullptr, "SubmenuPlayerList"_hash);
         });

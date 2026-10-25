@@ -214,11 +214,11 @@ namespace big::player
 		{
 			auto pos = get_player_coords();
 			auto rot = get_player_rotation();
-			auto forward = get_player_forward();
+			auto forward = character->GetActorForwardVector();
 
-			pos.X += 100.f + forward.X;
-			pos.Y += 100.f + forward.Y;
-			pos.Z += 100.f + forward.Z;
+			pos.X += 300.f * forward.X;
+			pos.Y += 300.f * forward.Y;
+			pos.Z += 300.f * forward.Z;
 
 			character->K2_TeleportTo(pos, rot);
 		}

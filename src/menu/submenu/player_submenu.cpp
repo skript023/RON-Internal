@@ -11,6 +11,7 @@ namespace big
             sub->add_option<bool_option<bool>>("godmode"_hash);
             sub->add_option<bool_option<bool>>("no_stun"_hash);
             sub->add_option<bool_option<bool>>("no_suppression"_hash);
+            sub->add_option<bool_option<bool>>("no_hit_effects"_hash);
             sub->add_option<bool_option<bool>>("infinite_ammo"_hash);
             sub->add_option<reguler_option>("add_magazine"_hash);
             sub->add_option<bool_option<bool>>("damage"_hash);

@@ -1,6 +1,7 @@
 #include "script.hpp"
 #include "utility/misc.hpp"
 #include "utility/player.hpp"
+#include "utility/ron.hpp"
 #include "events/entity_event.hpp"
 #include "commands/float_command.hpp"
 #include "commands/number_command.hpp"
@@ -98,4 +99,54 @@ namespace big
 	};
 
 	static game_walk_speed _game_walk_speed("Function ReadyOrNot.PlayerCharacter.Server_SetWalkSpeed");
+
+	static float_command _noclip_speed("noclip_speed", "Noclip Speed", "", 1.f, 30.f, 8.f);
+
+	// Flies you where you look, through walls. The game's own movement is stopped, so neither gravity nor walls hold you,
+	// and the walking input it still reads moves you instead, turned to the camera so looking up flies you up. The host
+	// decides where everyone is, so only the host can fly.
+	class noclip : public looped_command
+	{
+		using looped_command::looped_command;
+
+		// The pawn that was stopped, so turning off lets only that one walk again.
+		weak_object<SDK::APlayerCharacter> m_character;
+
+		void on_tick() override
+		{
+			auto c = unreal_engine::get_character();
+			auto controller = unreal_engine::get_player_controller();
+			if (!c || !c->CharacterMovement || !controller || !controller->HasAuthority() || !ron::is_active(c))
+				return;
+
+			if (c->CharacterMovement->MovementMode != SDK::EMovementMode::MOVE_None)
+				c->CharacterMovement->DisableMovement();
+			m_character = c;
+
+			// The input lies flat along where you face; its forward part is turned up or down to where you look.
+			const auto input = c->GetLastMovementInputVector();
+			if (input.Magnitude() <= 0.0)
+				return;
+
+			const double yaw = controller->ControlRotation.Yaw * (M_PI / 180.0);
+			const double pitch = controller->ControlRotation.Pitch * (M_PI / 180.0);
+			const SDK::FVector flat(std::cos(yaw), std::sin(yaw), 0.0);
+			const SDK::FVector right(-std::sin(yaw), std::cos(yaw), 0.0);
+			const SDK::FVector look(flat.X * std::cos(pitch), flat.Y * std::cos(pitch), std::sin(pitch));
+			const auto move = look * input.Dot(flat) + right * input.Dot(right);
+			const double step = _noclip_speed.get_state() * 100.0 * SDK::UGameplayStatics::GetWorldDeltaSeconds(c);
+			c->K2_SetActorLocation(c->K2_GetActorLocation() + move * step, false, nullptr, true);
+		}
+
+		// A pawn that went down or was cuffed meanwhile is left to the game.
+		void on_disable() override
+		{
+			auto c = m_character.get();
+			if (c && ron::is_active(c) && c->CharacterMovement && c->CharacterMovement->MovementMode == SDK::EMovementMode::MOVE_None)
+				c->CharacterMovement->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0);
+			m_character = {};
+		}
+	};
+
+	static noclip _noclip("noclip", "Noclip", "Fly where you look, through walls; turning it off inside a wall can leave you stuck (host only)");
 }

@@ -15,7 +15,7 @@ Mission actions change what the host decides, so they work in single player or a
 | Self | Godmode, Infinite Ammo, Add Magazine, Instant Kill, No Recoil, No Spread, Wall Penetration, Walk Speed |
 | Mission | Mission Tracker overlay, Target Inspector, Collectibles panel, Objective Alerts; Auto Win, Arrest All, Surrender or Knock Out Suspects, Report All, Collect All Evidence, Unlock All Doors, Disarm All Traps, Remove Door Wedges, Teleport to Next AI |
 | World | Slow Motion, Damage Multiplier, Freeze AI, AI Hold Fire, Objective and Evidence Markers, Infinite Squad Items, Reset Squad Stress |
-| ESP | Suspects, civilians, SWAT, traps, evidence, reportables, and collectibles, with name, line, health bar, box, corner box, 3D box, and skeleton, up to a maximum distance |
+| ESP | Suspects, civilians, SWAT, other players, traps, evidence, reportables, and collectibles, with name, line, health bar, box, corner box, 3D box, and skeleton (AI only), up to a maximum distance |
 | Aimbot | Aimbot, silent aim, triggerbot, FOV circle |
 | Teleport | Teleport forward and saved locations by category |
 | Settings | Astra's shared settings (layout, theme, banner, transparency, menu keys) plus Debug, Reload, Unload, Exit |

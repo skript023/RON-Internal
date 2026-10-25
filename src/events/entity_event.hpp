@@ -51,6 +51,7 @@ namespace big
         suspect,
         civilian,
         swat,
+        player,
         trap,
         evidence_weapon,
         evidence,

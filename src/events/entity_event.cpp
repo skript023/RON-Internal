@@ -344,6 +344,7 @@ namespace big
 		{
 		case esp_kind::suspect: return { 255, 0, 0, 255 };
 		case esp_kind::civilian: return { 0, 255, 0, 255 };
+		case esp_kind::player: return { 0, 230, 230, 255 };
 		default: return { 80, 160, 255, 255 };
 		}
 	}
@@ -399,13 +400,7 @@ namespace big
 
 		const bool want_box = _draw_box.get_state() || _draw_corner_box.get_state() || _draw_health.get_state();
 
-		for_each_persistent_character([&](SDK::ACyberneticCharacter* character, esp_kind kind) {
-			if (!character->Class)
-				return;
-
-			if (!kind_enabled(kind))
-				return;
-
+		auto add_character = [&](SDK::AReadyOrNotCharacter* character, esp_kind kind, std::string_view name) {
 			auto location = character->K2_GetActorLocation();
 			const float distance = origin.GetDistanceToInMeters(location);
 			if (distance > max_distance)
@@ -426,7 +421,7 @@ namespace big
 			data.screen = screen;
 			data.distance = distance;
 			data.color = character_color(kind, status);
-			data.display_text = std::format("{} [{}] [{:.0f}m]", ron::team_name(character), ron::health_status_name(status), distance);
+			data.display_text = std::format("{} [{}] [{:.0f}m]", name, ron::health_status_name(status), distance);
 
 			if (_draw_health.get_state())
 			{
@@ -434,7 +429,8 @@ namespace big
 				data.max_health = character->GetMaxHealth();
 			}
 
-			if (_draw_skeleton.get_state())
+			// The bone pairs are for the AI's meshes only.
+			if (_draw_skeleton.get_state() && kind != esp_kind::player)
 				data.has_skeleton = build_skeleton(character, controller, data.skeleton);
 			if (want_box)
 				data.has_box = build_box(character, controller, data.box_x, data.box_y, data.box_w, data.box_h);
@@ -442,7 +438,22 @@ namespace big
 				data.has_box_3d = build_box_3d(character, controller, data.box_3d);
 
 			back.push_back(std::move(data));
+		};
+
+		for_each_persistent_character([&](SDK::ACyberneticCharacter* character, esp_kind kind) {
+			if (character->Class && kind_enabled(kind))
+				add_character(character, kind, ron::team_name(character));
 		});
+
+		if (_esp_players.get_state())
+		{
+			auto self = unreal_engine::get_character();
+			for (auto character : gs->AllPlayerCharacters)
+			{
+				if (unreal_engine::is_valid_actor(character) && character != self && character->PlayerState)
+					add_character(character, esp_kind::player, character->PlayerState->PlayerNamePrivate.ToString());
+			}
+		}
 
 		g_esp_data.publish();
 	}

@@ -19,6 +19,7 @@ namespace big::features
 	inline bool_command _esp_suspects("esp_suspects", "Show Suspects", "Armed and unarmed suspects", true);
 	inline bool_command _esp_civilians("esp_civilians", "Show Civilians", "Civilians and hostages", true);
 	inline bool_command _esp_swat("esp_swat", "Show SWAT", "Your AI squad", false);
+	inline bool_command _esp_players("esp_players", "Show Players", "The other players in your lobby, behind walls too", true);
 	inline bool_command _esp_traps("esp_traps", "Show Traps", "Live door and tripwire traps", true);
 	inline bool_command _esp_evidence("esp_evidence", "Show Evidence", "Dropped weapons and evidence still to collect", true);
 	inline bool_command _esp_reportables("esp_reportables", "Show Reportables", "Things still to report to TOC", false);

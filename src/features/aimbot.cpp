@@ -259,8 +259,12 @@ namespace big
 						delta
 					);
 
-					// apply hasil smooth rotation
-					controller->SetControlRotation(smoothed);
+					// apply hasil smooth rotation: the step from the camera goes onto the control rotation, which recoil
+					// and sway keep apart from the camera
+					SDK::FRotator control_rot = controller->GetControlRotation();
+					control_rot.Pitch = normalize_angle(control_rot.Pitch + delta_angle(current_rot.Pitch, smoothed.Pitch));
+					control_rot.Yaw = normalize_angle(control_rot.Yaw + delta_angle(current_rot.Yaw, smoothed.Yaw));
+					controller->SetControlRotation(control_rot);
 				}
 			}
 		}

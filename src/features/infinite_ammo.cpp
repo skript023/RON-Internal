@@ -1,10 +1,14 @@
 #include "script.hpp"
+#include "utility/misc.hpp"
 #include "utility/player.hpp"
-#include "utility/weak_object.hpp"
+#include "events/entity_event.hpp"
+#include "commands/float_command.hpp"
+#include "commands/number_command.hpp"
 #include "commands/looped_command.hpp"
+#include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weak_object.hpp"
 
 namespace big
 {
@@ -17,7 +21,7 @@ namespace big
 
 		void on_tick() override
 		{
-			if (auto c = unreal_engine::get_character())
+			if (auto c = static_cast<SDK::APlayerCharacter*>(unreal_engine::get_character()))
 			{
 				if (auto wep = c->GetEquippedWeapon(); wep && !wep->bInfiniteAmmo)
 				{
@@ -32,7 +36,12 @@ namespace big
 			for (auto& weapon : m_weapons)
 			{
 				if (auto wep = weapon.get())
-					wep->bInfiniteAmmo = 0;
+				{
+					if (wep->bInfiniteAmmo)
+					{
+						wep->bInfiniteAmmo = 0;
+					}
+				}
 			}
 
 			m_weapons.clear();

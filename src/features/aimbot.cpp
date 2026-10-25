@@ -118,7 +118,7 @@ namespace big
 			auto ch = unreal_engine::get_character();
 			auto chara_location = player::get_player_forward();
 			auto controller = unreal_engine::get_player_controller();
-			auto level = world->PersistentLevel;
+			auto level = world ? world->PersistentLevel : nullptr;
 			if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return;
 
 			auto own_state = controller->AcknowledgedPawn->PlayerState;
@@ -291,7 +291,7 @@ namespace big
 				auto ch = unreal_engine::get_character();
 				auto chara_location = player::get_player_forward();
 				auto controller = unreal_engine::get_player_controller();
-				auto level = world->PersistentLevel;
+				auto level = world ? world->PersistentLevel : nullptr;
 				if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return eExecutionStatus::EXECUTION_CONTINUE;
 
 				auto own_state = controller->AcknowledgedPawn->PlayerState;

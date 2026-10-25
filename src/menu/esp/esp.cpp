@@ -144,6 +144,15 @@ namespace big
         if (features::_radar.get_state())
             draw_radar();
 
+        static const Color arc_color = { 255, 220, 0, 255 };
+        for (const auto& line : g_grenade_path.view())
+        {
+            if (line.a.X == line.b.X && line.a.Y == line.b.Y)
+                canvas::draw_circle(line.a.X, line.a.Y, 5.f, arc_color, 16);
+            else
+                canvas::draw_line(line.a.X, line.a.Y, line.b.X, line.b.Y, arc_color, 2.f);
+        }
+
         const auto display = ImGui::GetIO().DisplaySize;
         const float width = display.x * 0.5f;
 

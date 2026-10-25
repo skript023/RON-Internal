@@ -29,4 +29,5 @@ namespace big::features
 
 	inline bool_command _radar("radar", "Radar", "A top-down map of what the ESP shows around you; ESP must be enabled", false);
 	inline float_command _radar_range("radar_range", "Radar Range", "How far the radar reaches, in metres", 10.f, 100.f, 40.f);
+	inline bool_command _grenade_path("grenade_path", "Grenade Path", "The arc a grenade in your hand would fly, up to what it first hits; ESP must be enabled", false);
 }

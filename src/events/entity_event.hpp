@@ -98,6 +98,8 @@ namespace big
     // Written by entity_event on the game thread, read by esp::draw_esp on the render thread.
 	inline TripleBuffer<esp_data> g_esp_data{128};
 	inline TripleBuffer<radar_point> g_radar_data{128};
+	// The held grenade's arc on screen; a line of no length marks where it first hits something.
+	inline TripleBuffer<bone_line> g_grenade_path{128};
 
 	class entity_event
 	{

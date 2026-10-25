@@ -22,7 +22,7 @@ Mission actions change what the host decides, so they work in single player or a
 
 Every toggle is saved in `settings.json` in the `ReadyOrNot Mod` folder inside the game's install folder (for example `steamapps\common\Ready Or Not\ReadyOrNot Mod`), next to `menu_settings.json`, the saved teleports, and the log. The first start copies these files once from `%APPDATA%\ReadyOrNot`, where earlier builds kept them. The Astra loader reads the same folder, so it can switch features and set per-feature hotkeys while the game runs.
 
-World toggles use the game's own debug subsystem. Where a shipping build left a toggle's body out, the feature writes the flag the game reads instead; check each one in game.
+Objective Markers, Evidence Markers, and Infinite Squad Items use the game's own debug subsystem. Where a shipping build left a toggle's body out, the feature writes the flag the game reads instead; check each one in game. Freeze AI, AI Hold Fire, and Damage Multiplier work on the characters and their hits instead, since their debug switches did nothing in the shipping game.
 
 ## How it runs
 

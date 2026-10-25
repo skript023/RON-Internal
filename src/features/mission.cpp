@@ -165,6 +165,32 @@ namespace big::mission
 		return count;
 	}
 
+	// The game will not open a locked door, so it is unlocked first. A door with a live trap stays shut rather than set
+	// the trap off, and one that cannot swing at all is left alone.
+	int open_doors()
+	{
+		auto gs = ron::game_state();
+		auto character = unreal_engine::get_character();
+		if (!gs || !character)
+			return 0;
+
+		int count = 0;
+		for (auto door : gs->AllDoors)
+		{
+			if (!unreal_engine::is_valid_actor(door) || door->GetMaxOpenAmount() <= 0.f || std::abs(door->GetOpenAmount()) > 1.f)
+				continue;
+			if (auto trap = door->GetAttachedTrap(); trap && trap->TrapStatus == SDK::ETrapState::TS_Live)
+				continue;
+
+			if (door->IsLocked())
+				set_door_locked(door, false);
+			// The angle it swings to, or 0 when it does not open.
+			if (door->OpenDoor(character, false, true, true) != 0.f)
+				++count;
+		}
+		return count;
+	}
+
 	static void disarm(SDK::ATrapActor* trap)
 	{
 		if (trap && trap->TrapStatus == SDK::ETrapState::TS_Live)
@@ -302,6 +328,7 @@ namespace big
 	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up", "{} surrendered.", mission::surrender_suspects);
 	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds", "{} knocked out.", mission::knockout_suspects);
 	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad", "{} doors unlocked.", mission::unlock_doors);
+	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut", "{} doors opened.", mission::open_doors);
 	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire", "{} traps disarmed.", mission::disarm_traps);
 	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge", "{} wedges removed.", mission::remove_wedges);
 	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure", "Teleported.", [] {

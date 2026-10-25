@@ -20,6 +20,7 @@ namespace big
             sub->add_option<reguler_option>("report_all"_hash);
             sub->add_option<reguler_option>("collect_evidence"_hash);
             sub->add_option<reguler_option>("unlock_doors"_hash);
+            sub->add_option<reguler_option>("open_doors"_hash);
             sub->add_option<reguler_option>("disarm_traps"_hash);
             sub->add_option<reguler_option>("remove_wedges"_hash);
             sub->add_option<reguler_option>("teleport_next_ai"_hash);

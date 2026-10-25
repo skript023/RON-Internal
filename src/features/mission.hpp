@@ -16,6 +16,7 @@ namespace big::mission
 	int surrender_suspects();
 	int knockout_suspects();
 	int unlock_doors();
+	int open_doors();
 	int disarm_traps();
 	int remove_wedges();
 	bool teleport_to_next_ai();

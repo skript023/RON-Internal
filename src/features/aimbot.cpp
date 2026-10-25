@@ -1,5 +1,6 @@
 #include "script.hpp"
 #include "utility/player.hpp"
+#include "utility/ron.hpp"
 #include "events/entity_event.hpp"
 #include "commands/float_command.hpp"
 #include "commands/number_command.hpp"
@@ -21,25 +22,33 @@ namespace big
 	enum class aimbot_trigger_mode
 	{
 		lbutton = 0,
-		ads_only,
+		ads,
 		hotkey,
-		max
+		lbutton_and_ads
 	};
+
+	static bool key_down(int vk)
+	{
+		return (GetAsyncKeyState(vk) & 0x8000) != 0;
+	}
+
+	// The modes Aimbot Trigger Type lists: the left button, aiming down sights, the trigger key, or the left button
+	// while aiming down sights.
 	static bool should_trigger_aimbot(SDK::AReadyOrNotCharacter* ch)
 	{
 		switch ((aimbot_trigger_mode)_aimbot_trigger.get_state())
 		{
 		case aimbot_trigger_mode::lbutton:
-			return GetAsyncKeyState(VK_LBUTTON);
+			return key_down(VK_LBUTTON);
 
-		case aimbot_trigger_mode::ads_only:
-			return false;//ch->IsAiming() || ch->IsADS();
+		case aimbot_trigger_mode::ads:
+			return ch->bAiming;
 
 		case aimbot_trigger_mode::hotkey:
-			return GetAsyncKeyState(g_settings.aimbot.trigger_key);
+			return key_down(g_settings.aimbot.trigger_key);
 
-		case aimbot_trigger_mode::max:
-			return false;//GetAsyncKeyState(VK_LBUTTON) && (ch->IsAiming() || ch->IsADS());
+		case aimbot_trigger_mode::lbutton_and_ads:
+			return key_down(VK_LBUTTON) && ch->bAiming;
 		}
 
 		return false;
@@ -103,6 +112,53 @@ namespace big
 		case 2: return unreal_engine::get_location_bone(target_pawn, L"spine_1");
 		case 3: return unreal_engine::get_location_bone(target_pawn, L"pelvis");
 		}
+
+		return {};
+	}
+
+	struct aim_target
+	{
+		SDK::FVector location{};
+		float angle = std::numeric_limits<float>::max(); // radians from the centre of the view
+	};
+
+	// The suspect nearest the centre of the view that can still fight: in sight, and not down, cuffed or surrendered,
+	// since shooting a suspect who gave up costs the mission score.
+	static aim_target find_target(SDK::APlayerController* controller, const SDK::FMinimalViewInfo& pov)
+	{
+		aim_target best;
+		const SDK::FVector forward = RotationToVector(pov.Rotation);
+		const auto view_point = player::get_player_coords();
+
+		ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+			if (!ai->IsA(SDK::ASuspectCharacter::StaticClass()))
+				return;
+
+			auto health = ai->CharacterHealth;
+			if (!health)
+				return;
+
+			const auto status = health->HealthStatus;
+			if (status == SDK::EPlayerHealthStatus::HS_Dead || status == SDK::EPlayerHealthStatus::HS_Downed || status == SDK::EPlayerHealthStatus::HS_Arrested || status == SDK::EPlayerHealthStatus::HS_Incapacitated)
+				return;
+
+			if (ai->IsSurrendered() || !controller->LineOfSightTo(ai, view_point, false))
+				return;
+
+			auto target = get_aim_target(g_settings.aimbot.aimbot_target, ai);
+			// The mesh has no such bone; the actor's own location is still on the suspect.
+			if (target.IsZero())
+				target = ai->K2_GetActorLocation();
+
+			const float dot = std::clamp(static_cast<float>(forward.Dot((target - pov.Location).Normalize())), -1.f, 1.f);
+			if (dot <= 0.f)
+				return;
+
+			if (const float angle = std::acos(dot); angle < best.angle)
+				best = {target, angle};
+		});
+
+		return best;
 	}
 
 	class aimbot : public looped_command
@@ -111,78 +167,15 @@ namespace big
 
 		virtual void on_tick() override
 		{
-			// Get current player info
-			auto world = SDK::UWorld::GetWorld();
 			auto ch = unreal_engine::get_character();
-			auto chara_location = player::get_player_forward();
 			auto controller = unreal_engine::get_player_controller();
-			auto level = world->PersistentLevel;
-			if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return;
+			if (!SDK::UWorld::GetWorld() || !ch || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager)
+				return;
 
-			auto own_state = controller->AcknowledgedPawn->PlayerState;
-			auto pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
-
-			auto aimbot_angle = std::numeric_limits<float>::max();
-			SDK::FVector aimbot_target = {};
-
-			// Get player's forward direction from rotation
-			SDK::FVector player_forward = RotationToVector(pov.Rotation);
-
-			if (auto actors = level->Actors; actors.Num() > 0)
-			{
-				for (size_t i = 0; i < actors.Num(); i++)
-				{
-					if (!actors.IsValidIndex(i)) continue;
-
-					auto pawn = actors[i];
-
-					if (!pawn) continue;
-
-					if (!pawn->IsA(SDK::ASuspectCharacter::StaticClass()))
-						continue;
-
-					auto sus = static_cast<SDK::ASuspectCharacter*>(pawn);
-
-					if (!sus) continue;
-
-					if (!controller->LineOfSightTo(sus, player::get_player_coords(), false))
-						continue;
-
-					auto h = sus->CharacterHealth;
-
-					if (!h) continue;
-
-					auto health = h->HealthStatus;
-
-					if (health == SDK::EPlayerHealthStatus::HS_Dead || health == SDK::EPlayerHealthStatus::HS_Downed || health == SDK::EPlayerHealthStatus::HS_Arrested || health == SDK::EPlayerHealthStatus::HS_Incapacitated)
-						continue;
-
-					auto target = get_aim_target(g_settings.aimbot.aimbot_target, sus);
-
-					if (target.IsZero())
-					{
-						target = pawn->RootComponent->K2_GetComponentToWorld().Translation;
-						LOG(WARNING) << "Failed to get head location for target: " << sus->GetName() << ", using root location instead";
-					}
-
-					SDK::FVector direction = (target - pov.Location).Normalize();
-
-					float dot = player_forward.Dot(direction);
-
-					if (dot <= 0.f)
-						continue;
-
-					dot = std::clamp(dot, -1.f, 1.f);
-
-					float angle = std::acos(dot);
-
-					if (angle < aimbot_angle)
-					{
-						aimbot_angle = angle;
-						aimbot_target = target;
-					}
-				}
-			}
+			const auto& pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
+			const auto target = find_target(controller, pov);
+			const auto aimbot_target = target.location;
+			const auto aimbot_angle = target.angle;
 
 			// convert FOV dari degree ke rad
 			float max_fov = _aimbot_fov.get_state() * (M_PI / 180.0f);
@@ -200,37 +193,32 @@ namespace big
 				// delay supaya gak full auto 1000rpm
 				if (time - last_shot > 0.05f)
 				{
-					if (auto chara = unreal_engine::get_character())
+					if (auto wep = ch->GetEquippedWeapon())
 					{
-						if (auto wep = chara->GetEquippedWeapon())
-						{
-							SDK::FRotator current_rot = pov.Rotation;
+						SDK::FRotator current_rot = pov.Rotation;
 
-							// rotation target dari posisi camera → target bone
-							SDK::FRotator target_rot = get_aim_rotation(
-								pov.Location,
-								aimbot_target
-							);
+						// rotation target dari posisi camera → target bone
+						SDK::FRotator target_rot = get_aim_rotation(
+							pov.Location,
+							aimbot_target
+						);
 
-							// delta time dari world supaya smooth tidak FPS dependent
-							float delta = SDK::UGameplayStatics::GetWorldDeltaSeconds(
-								SDK::UWorld::GetWorld()
-							);
+						// delta time dari world supaya smooth tidak FPS dependent
+						float delta = SDK::UGameplayStatics::GetWorldDeltaSeconds(
+							SDK::UWorld::GetWorld()
+						);
 
-							// interpolation supaya tidak snap
-							SDK::FRotator smoothed = smooth_rotation(
-								current_rot,
-								target_rot,
-								100.f,
-								delta
-							);
+						// interpolation supaya tidak snap
+						SDK::FRotator smoothed = smooth_rotation(
+							current_rot,
+							target_rot,
+							100.f,
+							delta
+						);
 
-							wep->OnFire(smoothed, aimbot_target);
-						}
+						wep->OnFire(smoothed, aimbot_target);
 					}
 					last_shot = time;
-
-					//LOG(INFO) << "Triggerbot: Shot fired at target with angle " << aimbot_angle * (180.0f / M_PI) << " degrees";
 				}
 			}
 
@@ -239,8 +227,6 @@ namespace big
 				// hanya aim kalau target masih dalam FOV legit
 				if (aimbot_angle < max_fov && should_trigger_aimbot(ch))
 				{
-					SDK::FRotator current_rot = pov.Rotation;
-
 					// rotation target dari posisi camera → target bone
 					SDK::FRotator target_rot = get_aim_rotation(
 						pov.Location,
@@ -252,16 +238,22 @@ namespace big
 						SDK::UWorld::GetWorld()
 					);
 
-					// interpolation supaya tidak snap
-					SDK::FRotator smoothed = smooth_rotation(
-						current_rot,
+					// The step is measured from the camera, which recoil and sway move off the control rotation, and added
+					// to the control rotation. Starting from the camera instead added that offset back every frame and
+					// pushed the aim off the target while firing or aiming from the hip.
+					const SDK::FRotator camera_rot = pov.Rotation;
+					const SDK::FRotator step = smooth_rotation(
+						camera_rot,
 						target_rot,
 						_aimbot_smooth.get_state(),
 						delta
 					);
 
-					// apply hasil smooth rotation
-					controller->SetControlRotation(smoothed);
+					SDK::FRotator control_rot = controller->GetControlRotation();
+					control_rot.Pitch = normalize_angle(control_rot.Pitch + normalize_angle(step.Pitch - camera_rot.Pitch));
+					control_rot.Yaw = normalize_angle(control_rot.Yaw + normalize_angle(step.Yaw - camera_rot.Yaw));
+
+					controller->SetControlRotation(control_rot);
 				}
 			}
 		}
@@ -273,100 +265,26 @@ namespace big
 
 		eExecutionStatus on_call(SDK::UObject* _this, SDK::UFunction* function, void* parms) override
 		{
-			if (!_silent_mode.get_state()) return eExecutionStatus::EXECUTION_CONTINUE;
-
-			SDK::ABaseMagazineWeapon* gun = static_cast<SDK::ABaseMagazineWeapon*>(_this);
-
-			auto player = static_cast<SDK::AActor*>(unreal_engine::get_character());
-
-			if (gun->Owner == player)
-			{
-				auto params = static_cast<SDK::Params::BaseMagazineWeapon_Server_OnFire*>(parms);
-				auto world = SDK::UWorld::GetWorld();
-				auto ch = unreal_engine::get_character();
-				auto chara_location = player::get_player_forward();
-				auto controller = unreal_engine::get_player_controller();
-				auto level = world->PersistentLevel;
-				if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return eExecutionStatus::EXECUTION_CONTINUE;
-
-				auto own_state = controller->AcknowledgedPawn->PlayerState;
-				auto pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
-
-				auto aimbot_angle = std::numeric_limits<float>::max();
-				SDK::FVector aimbot_target = {};
-
-				// Get player's forward direction from rotation
-				SDK::FVector player_forward = RotationToVector(pov.Rotation);
-
-				if (auto actors = level->Actors; actors.Num() > 0)
-				{
-					for (size_t i = 0; i < actors.Num(); i++)
-					{
-						if (!actors.IsValidIndex(i)) continue;
-
-						auto pawn = actors[i];
-
-						if (!pawn) continue;
-
-						if (!pawn->IsA(SDK::ASuspectCharacter::StaticClass()))
-							continue;
-
-						auto sus = static_cast<SDK::ASuspectCharacter*>(pawn);
-
-						if (!sus) continue;
-
-						if (!controller->LineOfSightTo(sus, player::get_player_coords(), false))
-							continue;
-
-						auto h = sus->CharacterHealth;
-
-						if (!h) continue;
-
-						auto health = h->HealthStatus;
-
-						if (health == SDK::EPlayerHealthStatus::HS_Dead || health == SDK::EPlayerHealthStatus::HS_Downed || health == SDK::EPlayerHealthStatus::HS_Arrested || health == SDK::EPlayerHealthStatus::HS_Incapacitated)
-							continue;
-
-						auto target = get_aim_target(g_settings.aimbot.aimbot_target, sus);
-
-						if (target.IsZero())
-						{
-							target = pawn->RootComponent->K2_GetComponentToWorld().Translation;
-							LOG(WARNING) << "Failed to get head location for target: " << sus->GetName() << ", using root location instead";
-						}
-
-						SDK::FVector direction = (target - pov.Location).Normalize();
-
-						float dot = player_forward.Dot(direction);
-
-						if (dot <= 0.f)
-							continue;
-
-						dot = std::clamp(dot, -1.f, 1.f);
-
-						float angle = std::acos(dot);
-
-						if (angle < aimbot_angle)
-						{
-							aimbot_angle = angle;
-							aimbot_target = target;
-						}
-					}
-				}
-
-				float max_fov = _aimbot_fov.get_state() * (M_PI / 180.0f);
-
-				if (aimbot_angle < max_fov)
-				{
-					params->SpawnLoc = aimbot_target;
-
-					this->intercept(_this, function, params);
-
-					return eExecutionStatus::EXECUTION_INTERCEPTED;
-				}
-
+			if (!_silent_mode.get_state())
 				return eExecutionStatus::EXECUTION_CONTINUE;
-			}
+
+			auto gun = static_cast<SDK::ABaseMagazineWeapon*>(_this);
+			auto ch = unreal_engine::get_character();
+			auto controller = unreal_engine::get_player_controller();
+			// Only the player's own shots; everyone else's reach the game untouched.
+			if (!ch || gun->Owner != ch || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager)
+				return eExecutionStatus::EXECUTION_CONTINUE;
+
+			const auto target = find_target(controller, controller->PlayerCameraManager->CameraCachePrivate.POV);
+			if (target.angle >= _aimbot_fov.get_state() * (M_PI / 180.0f))
+				return eExecutionStatus::EXECUTION_CONTINUE;
+
+			auto params = static_cast<SDK::Params::BaseMagazineWeapon_Server_OnFire*>(parms);
+			params->SpawnLoc = target.location;
+
+			this->intercept(_this, function, params);
+
+			return eExecutionStatus::EXECUTION_INTERCEPTED;
 		}
 	};
 

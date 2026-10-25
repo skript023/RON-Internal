@@ -53,6 +53,7 @@ namespace big
         swat,
         player,
         trap,
+        door,
         evidence_weapon,
         evidence,
         reportable,

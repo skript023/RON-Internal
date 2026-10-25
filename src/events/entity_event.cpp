@@ -147,6 +147,7 @@ namespace big
 		case esp_kind::civilian: return _esp_civilians.get_state();
 		case esp_kind::swat: return _esp_swat.get_state();
 		case esp_kind::trap: return _esp_traps.get_state();
+		case esp_kind::door: return _esp_doors.get_state();
 		case esp_kind::evidence_weapon:
 		case esp_kind::evidence: return _esp_evidence.get_state();
 		case esp_kind::reportable: return _esp_reportables.get_state();
@@ -196,6 +197,21 @@ namespace big
 
 				auto name = ron::text(reportable->ReportableName);
 				add(esp_kind::reportable, reportable, name.empty() ? "Reportable" : name, { 0, 200, 255, 255 });
+			}
+		}
+
+		// A door's trap is drawn with the other traps; this shows what else stops it opening.
+		if (_esp_doors.get_state())
+		{
+			for (auto door : gs->AllDoors)
+			{
+				if (!unreal_engine::is_valid_actor(door))
+					continue;
+
+				const bool locked = door->IsLocked();
+				const bool wedged = door->GetAttachedWedge() != nullptr;
+				if (locked || wedged)
+					add(esp_kind::door, door, locked && wedged ? "Locked, Wedged" : locked ? "Locked" : "Wedged", { 235, 235, 235, 255 });
 			}
 		}
 

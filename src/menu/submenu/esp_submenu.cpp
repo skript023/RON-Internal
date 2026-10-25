@@ -15,6 +15,7 @@ namespace big
             sub->add_option<bool_option<bool>>("esp_swat"_hash);
             sub->add_option<bool_option<bool>>("esp_players"_hash);
             sub->add_option<bool_option<bool>>("esp_traps"_hash);
+            sub->add_option<bool_option<bool>>("esp_doors"_hash);
             sub->add_option<bool_option<bool>>("esp_evidence"_hash);
             sub->add_option<bool_option<bool>>("esp_reportables"_hash);
             sub->add_option<bool_option<bool>>("esp_collectibles"_hash);

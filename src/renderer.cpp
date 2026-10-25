@@ -324,7 +324,7 @@ namespace big
 			g_running = false;
 		}
 
-		if (m_init)
+		if (m_init && ImGui::GetCurrentContext())
 		{
 			ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam);
 		}

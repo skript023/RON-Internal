@@ -256,48 +256,160 @@ namespace big
         }
         else if (renderType == graphics_api::directx12)
         {
-            // RAII also releases partial initialization on unsupported adapters.
-            const auto initialize = [&]() -> eInitializationStatus
+            HMODULE dxgi_module;
+            HMODULE d3d12_module;
+            if ((dxgi_module = ::GetModuleHandle("dxgi.dll")) == NULL || (d3d12_module = ::GetModuleHandle("d3d12.dll")) == NULL)
             {
-                comptr<IDXGIFactory> factory;
-                comptr<ID3D12Device> device;
-                comptr<ID3D12CommandQueue> queue;
-                comptr<IDXGISwapChain> swapchain;
-                if (FAILED(CreateDXGIFactory(IID_PPV_ARGS(factory.GetAddressOf()))) ||
-                    FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(device.GetAddressOf()))))
-                    return eInitializationStatus::CREATE_DUMMY_DEVICE_ERROR;
-                D3D12_COMMAND_QUEUE_DESC queue_desc{};
-                queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-                if (FAILED(device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(queue.GetAddressOf()))))
-                    return eInitializationStatus::CREATE_DUMMY_DEVICE_ERROR;
-                DXGI_SWAP_CHAIN_DESC desc{};
-                desc.BufferDesc.Width = 100;
-                desc.BufferDesc.Height = 100;
-                desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                desc.SampleDesc.Count = 1;
-                desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-                desc.BufferCount = 2;
-                desc.OutputWindow = window;
-                desc.Windowed = TRUE;
-                desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-                if (FAILED(factory->CreateSwapChain(queue.Get(), &desc, swapchain.GetAddressOf())))
-                    return eInitializationStatus::CREATE_DUMMY_DEVICE_ERROR;
-                free(m_swapchain_methods);
-                m_swapchain_methods = static_cast<uint64_t*>(calloc(150, sizeof(uint64_t)));
-                if (!m_swapchain_methods) return eInitializationStatus::FAILED;
-                // Keep the existing DX12 method-table offsets used by the hooks.
-                memcpy(m_swapchain_methods + 44, *reinterpret_cast<uint64_t**>(queue.Get()), 19 * sizeof(uint64_t));
-                memcpy(m_swapchain_methods + 132, *reinterpret_cast<uint64_t**>(swapchain.Get()), 18 * sizeof(uint64_t));
-                m_render_type = graphics_api::directx12;
-                return eInitializationStatus::SUCCESS;
-            };
-            const auto result = initialize();
-            DestroyWindow(window);
-            UnregisterClass(window_class.lpszClassName, window_class.hInstance);
-            return result;
+                DestroyWindow(window);
+                UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                LOG(INFO) << "Failed get dx12 & dxgi module";
+
+                return eInitializationStatus::MODULE_NOT_FOUND_ERROR;
+            }
+
+            void* CreateDXGIFactory;
+            if ((CreateDXGIFactory = GetProcAddress(dxgi_module, "CreateDXGIFactory")) == NULL)
+            {
+                DestroyWindow(window);
+                UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            IDXGIFactory* factory;
+            if (((long(__stdcall*)(const IID&, void**))(CreateDXGIFactory))(__uuidof(IDXGIFactory), (void**)&factory) < 0)
+            {
+                DestroyWindow(window);
+                UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            IDXGIAdapter* adapter;
+            if (factory->EnumAdapters(0, &adapter) == DXGI_ERROR_NOT_FOUND)
+            {
+                DestroyWindow(window);
+                UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            void* D3D12CreateDevice;
+            if ((D3D12CreateDevice = ::GetProcAddress(d3d12_module, "D3D12CreateDevice")) == NULL)
+            {
+                DestroyWindow(window);
+                UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            ID3D12Device* device;
+            if (((long(__stdcall*)(IUnknown*, D3D_FEATURE_LEVEL, const IID&, void**))(D3D12CreateDevice))(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), (void**)&device) < 0)
+            {
+                ::DestroyWindow(window);
+                ::UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            D3D12_COMMAND_QUEUE_DESC queueDesc;
+            queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+            queueDesc.Priority = 0;
+            queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+            queueDesc.NodeMask = 0;
+
+            ID3D12CommandQueue* commandQueue;
+            if (device->CreateCommandQueue(&queueDesc, __uuidof(ID3D12CommandQueue), (void**)&commandQueue) < 0)
+            {
+                ::DestroyWindow(window);
+                ::UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            ID3D12CommandAllocator* commandAllocator;
+            if (device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator), (void**)&commandAllocator) < 0)
+            {
+                ::DestroyWindow(window);
+                ::UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            ID3D12GraphicsCommandList* commandList;
+            if (device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, NULL, __uuidof(ID3D12GraphicsCommandList), (void**)&commandList) < 0)
+            {
+                ::DestroyWindow(window);
+                ::UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::FAILED;
+            }
+
+            DXGI_RATIONAL refreshRate;
+            refreshRate.Numerator = 60;
+            refreshRate.Denominator = 1;
+
+            DXGI_MODE_DESC bufferDesc;
+            bufferDesc.Width = 100;
+            bufferDesc.Height = 100;
+            bufferDesc.RefreshRate = refreshRate;
+            bufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            bufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+            bufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+
+            DXGI_SAMPLE_DESC sampleDesc;
+            sampleDesc.Count = 1;
+            sampleDesc.Quality = 0;
+
+            DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+            swapChainDesc.BufferDesc = bufferDesc;
+            swapChainDesc.SampleDesc = sampleDesc;
+            swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+            swapChainDesc.BufferCount = 2;
+            swapChainDesc.OutputWindow = window;
+            swapChainDesc.Windowed = 1;
+            swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+
+            IDXGISwapChain* swapChain;
+            if (factory->CreateSwapChain(commandQueue, &swapChainDesc, &swapChain) < 0)
+            {
+                ::DestroyWindow(window);
+                ::UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+                return eInitializationStatus::CREATE_DUMMY_DEVICE_ERROR;
+            }
+
+            m_swapchain_methods = (uint64_t*)calloc(150, sizeof(uint64_t));
+            ::memcpy(m_swapchain_methods, *(uint64_t**)device, 44 * sizeof(uint64_t));
+            ::memcpy(m_swapchain_methods + 44, *(uint64_t**)commandQueue, 19 * sizeof(uint64_t));
+            ::memcpy(m_swapchain_methods + 44 + 19, *(uint64_t**)commandAllocator, 9 * sizeof(uint64_t));
+            ::memcpy(m_swapchain_methods + 44 + 19 + 9, *(uint64_t**)commandList, 60 * sizeof(uint64_t));
+            ::memcpy(m_swapchain_methods + 44 + 19 + 9 + 60, *(uint64_t**)swapChain, 18 * sizeof(uint64_t));
+
+            device->Release();
+            device = NULL;
+
+            commandQueue->Release();
+            commandQueue = NULL;
+
+            commandAllocator->Release();
+            commandAllocator = NULL;
+
+            commandList->Release();
+            commandList = NULL;
+
+            swapChain->Release();
+            swapChain = NULL;
+
+            ::DestroyWindow(window);
+            ::UnregisterClass(window_class.lpszClassName, window_class.hInstance);
+
+            m_render_type = graphics_api::directx12;
+
+            return eInitializationStatus::SUCCESS;
         }
-        DestroyWindow(window);
-        UnregisterClass(window_class.lpszClassName, window_class.hInstance);
 
         return eInitializationStatus::FAILED;
 	}

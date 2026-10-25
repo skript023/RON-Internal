@@ -1,10 +1,13 @@
 #pragma once
+#include "commands/bool_command.hpp"
 #include "task.hpp"
 #include "utility/weak_object.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 
 namespace big
 {
+	inline bool_command _player_alerts("player_alerts", "Player Alerts", "A notification when someone joins or leaves, or a teammate goes down", true);
+
 	// One player in the lobby as the last read on the game thread saw them.
 	struct player_info
 	{

@@ -17,6 +17,7 @@ namespace big
 		// in the engine.
 		canvas::add_submenu<regular_submenu>("Online Players", "SubmenuPlayerList"_hash, [](regular_submenu* sub)
 		{
+			sub->add_option<bool_option<bool>>("player_alerts"_hash);
 			if (player_event::is_spectating())
 				sub->add_option<reguler_option>("Stop Spectating", "Brings the camera back to you", [] { player_event::stop_spectating(); });
 

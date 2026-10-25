@@ -28,6 +28,23 @@ namespace big
 		bool g_spectating = false;
 		weak_object<SDK::APlayerCharacter> g_spectated;
 
+		struct tracked_player
+		{
+			weak_object<SDK::APlayerState> state;
+			std::string name;
+		};
+
+		struct tracked_status
+		{
+			weak_object<SDK::APlayerState> state;
+			SDK::EPlayerHealthStatus status;
+		};
+
+		std::vector<tracked_player> g_lobby;
+		std::vector<tracked_status> g_statuses;
+		const void* g_lobby_game_state = nullptr;
+		clock::time_point g_lobby_since{};
+
 		weak_object<SDK::UPlayersList> g_players_list;
 
 		const char* platform_name(SDK::EGamePlatform platform)
@@ -164,6 +181,72 @@ namespace big
 			return info;
 		}
 
+		// Players already here when a map loads, or still loading into it, are not announced as joining.
+		void check_lobby(SDK::AReadyOrNotGameState* gs, const std::vector<player_info>& players)
+		{
+			if (g_lobby_game_state != gs)
+			{
+				g_lobby.clear();
+				g_statuses.clear();
+				g_lobby_game_state = gs;
+				g_lobby_since = clock::now();
+			}
+
+			const bool quiet = clock::now() - g_lobby_since < 15s || !_player_alerts.get_state();
+
+			for (const auto& player : players)
+			{
+				// The name arrives a moment after the player does.
+				if (player.name.empty() || std::ranges::any_of(g_lobby, [&](const tracked_player& t) { return t.state == player.state; }))
+					continue;
+
+				g_lobby.push_back({ player.state, player.name });
+				if (!quiet && !player.local)
+					notification::info("Player joined", player.name);
+			}
+
+			std::erase_if(g_lobby, [&](const tracked_player& tracked) {
+				if (std::ranges::any_of(players, [&](const player_info& p) { return p.state == tracked.state; }))
+					return false;
+
+				if (!quiet)
+					notification::info("Player left", tracked.name);
+				return true;
+			});
+		}
+
+		void check_downed(const std::vector<player_info>& players)
+		{
+			std::erase_if(g_statuses, [&](const tracked_status& tracked) {
+				return std::ranges::none_of(players, [&](const player_info& p) { return p.state == tracked.state; });
+			});
+
+			for (const auto& player : players)
+			{
+				if (player.local || !player.has_character)
+					continue;
+
+				auto it = std::ranges::find_if(g_statuses, [&](const tracked_status& t) { return t.state == player.state; });
+				if (it == g_statuses.end())
+				{
+					g_statuses.push_back({ player.state, player.status });
+					continue;
+				}
+
+				if (it->status == player.status)
+					continue;
+
+				it->status = player.status;
+				const bool down = player.status == SDK::EPlayerHealthStatus::HS_Downed || player.status == SDK::EPlayerHealthStatus::HS_Incapacitated;
+				if (!down || !_player_alerts.get_state())
+					continue;
+
+				const auto status = ron::health_status_name(player.status);
+				notification::warning(std::format("{} is down", player.name),
+				    player.distance >= 0.f ? std::format("{}, {:.0f} m away.", status, player.distance) : std::format("{}.", status));
+			}
+		}
+
 		void view_own_character()
 		{
 			g_spectating = false;
@@ -208,6 +291,9 @@ namespace big
 				if (unreal_engine::is_valid_actor(state))
 					players.push_back(read_player(state, controller, list, origin));
 			}
+
+			check_lobby(gs, players);
+			check_downed(players);
 
 			std::lock_guard lock(g_shared.mutex);
 			g_shared.players = std::move(players);

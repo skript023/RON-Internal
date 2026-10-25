@@ -15,7 +15,7 @@ Mission actions change what the host decides, so they work in single player or a
 | Self | Godmode, Infinite Ammo, Add Magazine, Instant Kill, No Recoil, No Spread, Wall Penetration, Walk Speed |
 | Mission | Mission Tracker overlay, Target Inspector, Collectibles panel, Objective Alerts; Auto Win, Arrest All, Surrender or Knock Out Suspects, Report All, Collect All Evidence, Unlock All Doors, Disarm All Traps, Remove Door Wedges, Teleport to Next AI |
 | World | Slow Motion, Damage Multiplier, Freeze AI, AI Hold Fire, Objective and Evidence Markers, Infinite Squad Items, Reset Squad Stress |
-| Online Players (in Self) | A page per player with health per limb, status, held item and ammo, distance, ping, and platform; Teleport to Player, Spectate, Mute; as host also Heal & Revive, Refill Ammo, Godmode, and Kick |
+| Online Players (in Self) | Player Alerts for joins, leaves, and downed teammates; a page per player with health per limb, status, held item and ammo, distance, ping, and platform; Teleport to Player, Spectate, Mute; as host also Heal & Revive, Refill Ammo, Godmode, and Kick |
 | ESP | Suspects, civilians, SWAT, other players, traps, evidence, reportables, and collectibles, with name, line, health bar, box, corner box, 3D box, and skeleton (AI only), up to a maximum distance |
 | Aimbot | Aimbot, silent aim, triggerbot, FOV circle |
 | Teleport | Teleport forward and saved locations by category |
@@ -32,7 +32,7 @@ Objective Markers, Evidence Markers, and Infinite Squad Items use the game's own
 - Everything that reads or calls the engine runs on the game thread, in C++20 coroutine tasks (`task.hpp`, `task_mgr`) resumed once per frame from `ReceiveTick` (`Engine.ActorComponent.ReceiveTick` and the player controller's and player character's Blueprints), the same task system as the Valheim trainer. The menu and commands hand work to the game thread with `async_run`, which queues a task for the next tick. The render thread only draws.
 - The ESP worker (`events/entity_event.cpp`) projects targets on the game thread and hands them to the renderer through a triple buffer.
 - The mission worker (`events/mission_event.cpp`) reads the mission a few times a second for the tracker, the inspector, the collectibles list, and objective alerts.
-- The player worker (`events/player_event.cpp`) reads the lobby a few times a second for the Online Players pages. Mute and the player ID come from the game's own player list, which exists only once the game has shown it, such as in the pause menu.
+- The player worker (`events/player_event.cpp`) reads the lobby a few times a second for the Online Players pages and Player Alerts. Mute and the player ID come from the game's own player list, which exists only once the game has shown it, such as in the pause menu.
 
 ## Building
 

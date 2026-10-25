@@ -30,16 +30,16 @@ namespace big
 		switch ((aimbot_trigger_mode)_aimbot_trigger.get_state())
 		{
 		case aimbot_trigger_mode::lbutton:
-			return GetAsyncKeyState(VK_LBUTTON);
+			return GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
 		case aimbot_trigger_mode::ads_only:
-			return false;//ch->IsAiming() || ch->IsADS();
+			return ch->bAiming;
 
 		case aimbot_trigger_mode::hotkey:
-			return GetAsyncKeyState(g_settings.aimbot.trigger_key);
+			return GetAsyncKeyState(g_settings.aimbot.trigger_key) & 0x8000;
 
 		case aimbot_trigger_mode::max:
-			return false;//GetAsyncKeyState(VK_LBUTTON) && (ch->IsAiming() || ch->IsADS());
+			return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) && ch->bAiming;
 		}
 
 		return false;

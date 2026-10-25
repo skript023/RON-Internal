@@ -128,7 +128,8 @@ namespace big
 	{
 		aim_target best;
 		const SDK::FVector forward = RotationToVector(pov.Rotation);
-		const auto view_point = player::get_player_coords();
+		// Seen from the camera, as the player sees it; the capsule's centre sits below a waist-high cover the head clears.
+		const auto view_point = pov.Location;
 
 		ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
 			if (!ai->IsA(SDK::ASuspectCharacter::StaticClass()))
@@ -184,14 +185,10 @@ namespace big
 			// ================= TRIGGERBOT =================
 			if (_triggerbot.get_state() && aimbot_angle < trigger_fov)
 			{
-				static float last_shot = 0.f;
+				static std::chrono::steady_clock::time_point last_shot{};
+				const auto time = std::chrono::steady_clock::now();
 
-				float time = SDK::UGameplayStatics::GetRealTimeSeconds(
-					SDK::UWorld::GetWorld()
-				);
-
-				// delay supaya gak full auto 1000rpm
-				if (time - last_shot > 0.05f)
+				if (time - last_shot > 50ms)
 				{
 					if (auto wep = ch->GetEquippedWeapon())
 					{

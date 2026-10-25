@@ -1,57 +1,50 @@
-#include "game_tick.hpp"
-#include "pointers.hpp"
-#include "renderer.hpp"
+#include "process_event/process_event.hpp"
 #include "task_mgr.hpp"
+#include "renderer.hpp"
 
-namespace big::game_tick
+#include "SDK/UMG_parameters.hpp"
+
+namespace big::features
 {
-	// The game thread owns the game window. Animation and widget events can also run on worker threads, which must
-	// never resume a task.
-	static DWORD game_thread_id()
+	class script_tick : public process_event
 	{
-		static std::atomic<DWORD> id{0};
-		if (!id && g_pointers && g_pointers->m_hwnd)
-			id = GetWindowThreadProcessId(g_pointers->m_hwnd, nullptr);
-		return id;
-	}
+		using process_event::process_event;
 
-	// One kind of event alone was not enough: Engine.ActorComponent.ReceiveTick came only from a few components, such
-	// as one on the M4 SR, so holding another gun stopped every task. Characters' animation, the HUD's widgets and the
-	// AI's behaviour trees raise these events every frame in a mission.
-	void on_frame_event()
-	{
-		if (GetCurrentThreadId() != game_thread_id())
-			return;
-
-		// A task that calls into the game can raise another of these events; that one waits for the next frame.
-		static bool ticking = false;
-		if (ticking)
-			return;
-
-		static std::uint64_t last_frame = 0;
-		static auto last_tick = std::chrono::steady_clock::now();
-		static std::uint32_t calls = 0;
-
-		const auto frame = g_present_count.load(std::memory_order_relaxed);
-		if (frame == last_frame)
+		virtual eExecutionStatus on_call(SDK::UObject* _this, SDK::UFunction* function, void* parms)
 		{
-			// Hundreds of these events arrive in a frame, so the clock is read only on every 64th.
-			if (++calls % 64 != 0 || std::chrono::steady_clock::now() - last_tick < 50ms)
-				return;
+			// ReceiveTick runs on the game thread for every ticking component, many times a frame. Tasks run once
+			// per presented frame, or every 50 ms while nothing is presented, such as before the swapchain is hooked.
+			static std::uint64_t last_frame = 0;
+			static auto last_tick = std::chrono::steady_clock::now();
+
+			const auto frame = g_present_count.load(std::memory_order_relaxed);
+			const auto now = std::chrono::steady_clock::now();
+			if (frame == last_frame && now - last_tick < 50ms)
+				return eExecutionStatus::EXECUTION_CONTINUE;
+
+			last_frame = frame;
+			last_tick = now;
+
+			task_mgr::tick();
+
+			static bool running = false;
+
+			if (!running)
+			{
+				LOG(INFO) << "Tick Running";
+
+				running = true;
+			}
+
+			return eExecutionStatus::EXECUTION_CONTINUE;
 		}
+	};
 
-		last_frame = frame;
-		last_tick = std::chrono::steady_clock::now();
+	static script_tick _script_tick("Function Engine.ActorComponent.ReceiveTick");
 
-		ticking = true;
-		task_mgr::tick();
-		ticking = false;
-
-		static bool running = false;
-		if (!running)
-		{
-			LOG(INFO) << "Tick Running";
-			running = true;
-		}
-	}
+	// Engine.ActorComponent.ReceiveTick came only from a few components, such as one on the M4 SR, so holding another
+	// gun stopped every task. The player controller and the player's character override ReceiveTick in their own
+	// Blueprints and tick every frame.
+	static script_tick _controller_tick("Function BP_BaseController.BP_BaseController_C.ReceiveTick");
+	static script_tick _player_tick("Function BasePlayer.BasePlayer_C.ReceiveTick");
 }

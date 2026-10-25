@@ -191,14 +191,13 @@ namespace big
 			// ================= TRIGGERBOT =================
 			if (_triggerbot.get_state() && aimbot_angle < trigger_fov)
 			{
-				static float last_shot = 0.f;
+				// steady_clock, since the world's real time starts over on every map
+				static std::chrono::steady_clock::time_point last_shot{};
 
-				float time = SDK::UGameplayStatics::GetRealTimeSeconds(
-					SDK::UWorld::GetWorld()
-				);
+				const auto time = std::chrono::steady_clock::now();
 
 				// delay supaya gak full auto 1000rpm
-				if (time - last_shot > 0.05f)
+				if (time - last_shot > 50ms)
 				{
 					if (auto chara = unreal_engine::get_character())
 					{

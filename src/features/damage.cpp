@@ -82,22 +82,18 @@ namespace big
 	{
 		using process_event::process_event;
 
-		static void add_damage(SDK::AReadyOrNotCharacter* character, float hit, float extra)
+		static void add_damage(SDK::AReadyOrNotCharacter* character, float extra)
 		{
 			auto health = character->CharacterHealth;
 			if (!health)
 				return;
 
-			const float before = character->GetCurrentHealth();
-			if (extra >= before)
+			if (extra >= character->GetCurrentHealth())
 				character->Kill();
 			else if (extra > 0.f)
 				health->DecreaseResource(extra);
 			else if (extra < 0.f)
 				health->IncreaseResource(-extra);
-
-			LOG(INFO) << std::format("Damage Multiplier: {} took {:.1f}, {:+.1f} more, health {:.1f} -> {:.1f}", character->Class->GetName(), hit,
-			    extra, before, character->GetCurrentHealth());
 		}
 
 		eExecutionStatus on_call(SDK::UObject* _this, SDK::UFunction* function, void* parms) override
@@ -127,9 +123,8 @@ namespace big
 				return eExecutionStatus::EXECUTION_CONTINUE;
 			}
 
-			const float hit = params->Damage;
 			const float scale = std::clamp(_damage_scale.get_state(), _damage_scale.get_minimum(), _damage_scale.get_maximum());
-			async_run([target = weak_object<SDK::AReadyOrNotCharacter>(victim), lethal, hit, extra = hit * (scale - 1.f)] {
+			async_run([target = weak_object<SDK::AReadyOrNotCharacter>(victim), lethal, extra = params->Damage * (scale - 1.f)] {
 				auto character = target.get();
 				if (!character || character->IsDeadNotUnconscious())
 					return;
@@ -137,7 +132,7 @@ namespace big
 				if (lethal)
 					character->Kill();
 				else
-					add_damage(character, hit, extra);
+					add_damage(character, extra);
 			});
 			return eExecutionStatus::EXECUTION_CONTINUE;
 		}

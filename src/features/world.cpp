@@ -233,11 +233,16 @@ namespace big
 
 		void on_call() override
 		{
-			if (auto controller = ron::controller())
+			// Officers' stress belongs to the Commander roster; outside it the call changes nothing.
+			auto controller = ron::controller();
+			if (!controller || !SDK::UBpGameplayHelperLib::IsCommanderMode(controller))
 			{
-				controller->SetRosterStressValue(0.f);
-				notification::success(get_label(), "Squad stress reset.");
+				notification::warning(get_label(), "Only works in Commander mode.");
+				return;
 			}
+
+			controller->SetRosterStressValue(0.f);
+			notification::success(get_label(), "Squad stress reset.");
 		}
 	};
 

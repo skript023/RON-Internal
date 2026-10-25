@@ -368,7 +368,9 @@ namespace big
 	static void build_frame()
 	{
 		auto& back = g_esp_data.back();
+		auto& radar = g_radar_data.back();
 		back.clear();
+		radar.clear();
 
 		auto gs = ron::game_state();
 		auto controller = unreal_engine::get_player_controller();
@@ -376,6 +378,7 @@ namespace big
 		{
 			g_static_targets.clear();
 			g_esp_data.publish();
+			g_radar_data.publish();
 			return;
 		}
 
@@ -392,12 +395,28 @@ namespace big
 		const auto origin = player::get_player_coords();
 		const float max_distance = _esp_distance.get_state();
 
+		// Recorded before the ESP's own distance and screen checks, since the radar also shows what is behind you.
+		const bool radar_on = _radar.get_state();
+		const float radar_range = _radar_range.get_state();
+		const double yaw = controller->ControlRotation.Yaw * (M_PI / 180.0);
+		const double cos_yaw = std::cos(yaw);
+		const double sin_yaw = std::sin(yaw);
+		auto add_radar = [&](const SDK::FVector& location, float distance, Color color) {
+			if (!radar_on || distance > radar_range)
+				return;
+
+			const auto delta = location - origin;
+			radar.push_back({ static_cast<float>((delta.X * cos_yaw + delta.Y * sin_yaw) / 100.0),
+			    static_cast<float>((delta.Y * cos_yaw - delta.X * sin_yaw) / 100.0), std::abs(delta.Z) > 250.0, color });
+		};
+
 		for (const auto& target : g_static_targets)
 		{
 			if (!kind_enabled(target.kind))
 				continue;
 
 			const float distance = origin.GetDistanceToInMeters(target.location);
+			add_radar(target.location, distance, target.color);
 			if (distance > max_distance)
 				continue;
 
@@ -419,6 +438,9 @@ namespace big
 		auto add_character = [&](SDK::AReadyOrNotCharacter* character, esp_kind kind, std::string_view name) {
 			auto location = character->K2_GetActorLocation();
 			const float distance = origin.GetDistanceToInMeters(location);
+			const auto status = character->CharacterHealth ? character->CharacterHealth->HealthStatus : SDK::EPlayerHealthStatus::HS_NotAvailable;
+			const auto color = character_color(kind, status);
+			add_radar(location, distance, color);
 			if (distance > max_distance)
 				return;
 
@@ -430,13 +452,11 @@ namespace big
 			if (!controller->ProjectWorldLocationToScreen(location, &screen, false))
 				return;
 
-			const auto status = character->CharacterHealth ? character->CharacterHealth->HealthStatus : SDK::EPlayerHealthStatus::HS_NotAvailable;
-
 			esp_data data{};
 			data.kind = kind;
 			data.screen = screen;
 			data.distance = distance;
-			data.color = character_color(kind, status);
+			data.color = color;
 			data.display_text = std::format("{} [{}] [{:.0f}m]", name, ron::health_status_name(status), distance);
 
 			if (_draw_health.get_state())
@@ -472,6 +492,7 @@ namespace big
 		}
 
 		g_esp_data.publish();
+		g_radar_data.publish();
 	}
 
 	// A fault reading one actor skips this frame instead of ending the worker for the rest of the session.
@@ -499,6 +520,7 @@ namespace big
 			else if (had_data)
 			{
 				g_esp_data.clear_all();
+				g_radar_data.clear_all();
 				g_static_targets.clear();
 				had_data = false;
 			}
@@ -507,6 +529,7 @@ namespace big
 		}
 
 		g_esp_data.clear_all();
+		g_radar_data.clear_all();
 		co_return;
 	}
 }

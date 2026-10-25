@@ -26,4 +26,7 @@ namespace big::features
 	inline bool_command _esp_reportables("esp_reportables", "Show Reportables", "Things still to report to TOC", false);
 	inline bool_command _esp_collectibles("esp_collectibles", "Show Collectibles", "Lore collectibles on the map", false);
 	inline number_command<float> _esp_distance("esp_distance", "Max Distance", "Things further away than this are not drawn", 5.f, 500.f, 150.f);
+
+	inline bool_command _radar("radar", "Radar", "A top-down map of what the ESP shows around you; ESP must be enabled", false);
+	inline float_command _radar_range("radar_range", "Radar Range", "How far the radar reaches, in metres", 10.f, 100.f, 40.f);
 }

@@ -86,8 +86,18 @@ namespace big
         std::array<SDK::FVector2D, 8> box_3d{};
     };
 
+    // Where something the ESP shows lies from you, in metres along your view and to its right.
+    struct radar_point
+    {
+        float forward;
+        float right;
+        bool other_floor;
+        Color color;
+    };
+
     // Written by entity_event on the game thread, read by esp::draw_esp on the render thread.
 	inline TripleBuffer<esp_data> g_esp_data{128};
+	inline TripleBuffer<radar_point> g_radar_data{128};
 
 	class entity_event
 	{

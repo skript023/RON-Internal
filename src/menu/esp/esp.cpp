@@ -94,6 +94,45 @@ namespace big
             255 };
         canvas::draw_line(x, data.box_y + data.box_h - filled, x, data.box_y + data.box_h, color, 2.f);
     }
+    // A top-down panel of what entity_event placed around you, your view pointing up. Something more than a floor above
+    // or below you is drawn as a ring.
+    static void draw_radar()
+    {
+        bool open = true;
+        if (canvas::begin_panel("Radar", &open, {.size = {260.f, 280.f}}))
+        {
+            const auto corner = ImGui::GetCursorScreenPos();
+            const auto size = ImGui::GetContentRegionAvail();
+            const float radius = (std::min)(size.x, size.y) * 0.5f - 4.f;
+            const ImVec2 centre{corner.x + size.x * 0.5f, corner.y + size.y * 0.5f};
+            if (radius > 8.f)
+            {
+                auto draw = ImGui::GetWindowDrawList();
+                const ImU32 grid = IM_COL32(255, 255, 255, 50);
+                draw->AddCircle(centre, radius, grid, 48);
+                draw->AddCircle(centre, radius * 0.5f, grid, 48);
+                draw->AddLine({centre.x, centre.y - radius}, {centre.x, centre.y + radius}, grid);
+                draw->AddLine({centre.x - radius, centre.y}, {centre.x + radius, centre.y}, grid);
+                draw->AddTriangleFilled({centre.x, centre.y - 7.f}, {centre.x - 5.f, centre.y + 5.f}, {centre.x + 5.f, centre.y + 5.f}, IM_COL32_WHITE);
+
+                const float scale = radius / features::_radar_range.get_state();
+                for (const auto& point : g_radar_data.view())
+                {
+                    const ImVec2 at{centre.x + point.right * scale, centre.y - point.forward * scale};
+                    const ImU32 color = IM_COL32(point.color.r, point.color.g, point.color.b, point.color.a);
+                    if (point.other_floor)
+                        draw->AddCircle(at, 3.5f, color, 12, 1.5f);
+                    else
+                        draw->AddCircleFilled(at, 3.5f, color);
+                }
+            }
+        }
+        canvas::end_panel();
+
+        // The close button switches the feature off, the same as the menu row.
+        if (!open)
+            features::_radar.set_state(false);
+    }
     void esp::draw_esp()
 	{
         if (features::_draw_fov.get_state())
@@ -101,6 +140,9 @@ namespace big
 
         if (!features::_esp_enabled.get_state())
             return;
+
+        if (features::_radar.get_state())
+            draw_radar();
 
         const auto display = ImGui::GetIO().DisplaySize;
         const float width = display.x * 0.5f;

@@ -57,6 +57,17 @@ namespace big
 	// The debug subsystem's AI movement and AI targeting switches did nothing in the shipping game, so these two work on
 	// the characters themselves.
 
+	// Each AI a feature changed, listed once however often the game undoes the change, so turning it off puts each one
+	// back. Anyone the engine freed since, such as on a level change, is dropped.
+	static void track(std::vector<weak_object<SDK::ACyberneticCharacter>>& changed, SDK::ACyberneticCharacter* ai)
+	{
+		std::erase_if(changed, [](const auto& entry) { return !entry; });
+
+		const weak_object<SDK::ACyberneticCharacter> entry(ai);
+		if (std::ranges::find(changed, entry) == changed.end())
+			changed.push_back(entry);
+	}
+
 	// Suspects and civilians stop moving: movement off on each one, back to walking afterwards. AI moves on the host,
 	// so only the host freezes it; the squad keeps moving.
 	class freeze_ai : public looped_command
@@ -79,7 +90,7 @@ namespace big
 					return;
 
 				movement->DisableMovement();
-				m_frozen.emplace_back(ai);
+				track(m_frozen, ai);
 			});
 		}
 
@@ -142,7 +153,7 @@ namespace big
 				if (ai->IsA(SDK::ASWATCharacter::StaticClass()) && !ai->bNoTarget)
 				{
 					ai->bNoTarget = true;
-					m_squad.emplace_back(ai);
+					track(m_squad, ai);
 				}
 			});
 		}

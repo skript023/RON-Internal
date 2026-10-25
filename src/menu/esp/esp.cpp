@@ -30,13 +30,18 @@ namespace big
         float center_x = screen_w * 0.5f;
         float center_y = screen_h * 0.5f;
 
+        // The aimbot takes targets up to this angle from the centre; from 90 degrees on that is past the screen edges.
+        if (aimbot_fov_deg >= 89.f)
+            return;
+
         float aimbot_rad = aimbot_fov_deg * (M_PI / 180.f);
         float camera_rad = camera_fov_deg * (M_PI / 180.f);
 
+        // The camera's FOV is horizontal, so it spans half the screen width either side of the centre.
         float radius =
             tanf(aimbot_rad) /
             tanf(camera_rad * 0.5f) *
-            (screen_h * 0.5f);
+            (screen_w * 0.5f);
 
         canvas::draw_circle(
             center_x,

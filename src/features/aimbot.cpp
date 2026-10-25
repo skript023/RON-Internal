@@ -103,6 +103,8 @@ namespace big
 		case 2: return unreal_engine::get_location_bone(target_pawn, L"spine_1");
 		case 3: return unreal_engine::get_location_bone(target_pawn, L"pelvis");
 		}
+
+		return {};
 	}
 
 	class aimbot : public looped_command
@@ -370,6 +372,8 @@ namespace big
 
 				return eExecutionStatus::EXECUTION_CONTINUE;
 			}
+
+			return eExecutionStatus::EXECUTION_CONTINUE;
 		}
 	};
 

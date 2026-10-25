@@ -13,6 +13,7 @@
 #include "events/main_event.hpp"
 #include "events/entity_event.hpp"
 #include "events/mission_event.hpp"
+#include "events/player_event.hpp"
 #include "events/server_event.hpp"
 #include "server/server_module.hpp"
 
@@ -111,6 +112,7 @@ DWORD APIENTRY main_thread(LPVOID)
 		task_mgr::add(&main_event::run);
 		task_mgr::add(&entity_event::run);
 		task_mgr::add(&mission_event::run);
+		task_mgr::add(&player_event::run);
 
 		LOG(INFO) << "Tasks registered.";
 

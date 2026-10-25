@@ -145,7 +145,7 @@ namespace big
 
 					if (!sus) continue;
 
-					if (!controller->LineOfSightTo(sus, pov.Location, false))
+					if (sus->IsSurrendered() || !controller->LineOfSightTo(sus, pov.Location, false))
 						continue;
 
 					auto h = sus->CharacterHealth;
@@ -315,7 +315,7 @@ namespace big
 
 						if (!sus) continue;
 
-						if (!controller->LineOfSightTo(sus, pov.Location, false))
+						if (sus->IsSurrendered() || !controller->LineOfSightTo(sus, pov.Location, false))
 							continue;
 
 						auto h = sus->CharacterHealth;

@@ -216,44 +216,6 @@ namespace big
 
 	static slow_motion _slow_motion("slow_motion", "Slow Motion", "Slows the whole game down (host only)");
 
-	static float_command _damage_scale("damage_scale", "Damage Scale", "Weapon damage while Damage Multiplier is on", 0.1f, 10.f, 2.f);
-
-	class damage_multiplier : public looped_command
-	{
-		using looped_command::looped_command;
-
-		void on_tick() override
-		{
-			auto subsystem = ron::debug_subsystem();
-			if (!subsystem)
-				return;
-
-			const float scale = _damage_scale.get_state();
-			if (subsystem->GlobalDamageMultiplier_Weapons != scale)
-			{
-				subsystem->SetGlobalDamageMultiplier_Weapons(scale);
-				subsystem->GlobalDamageMultiplier_Weapons = scale;
-			}
-			if (!subsystem->bApplyGlobalDamageMultiplier_Weapons)
-			{
-				subsystem->ToggleGlobalDamageMultiplier_Weapons();
-				subsystem->bApplyGlobalDamageMultiplier_Weapons = 1;
-			}
-		}
-
-		void on_disable() override
-		{
-			auto subsystem = ron::debug_subsystem();
-			if (!subsystem || !subsystem->bApplyGlobalDamageMultiplier_Weapons)
-				return;
-
-			subsystem->ToggleGlobalDamageMultiplier_Weapons();
-			subsystem->bApplyGlobalDamageMultiplier_Weapons = 0;
-		}
-	};
-
-	static damage_multiplier _damage_multiplier("damage_multiplier", "Damage Multiplier", "Scales the damage every weapon deals");
-
 	class reset_roster_stress : public command
 	{
 		using command::command;

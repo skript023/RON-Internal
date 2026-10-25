@@ -5,20 +5,11 @@ namespace big
 {
 	void APIENTRY hooks::process_event(SDK::UObject* _this, SDK::UFunction* function, void* parms)
 	{
-		// The trainer's handler and the game's function are guarded apart. A faulting handler still lets the game's
-		// function run, but a game function that faulted is not run a second time, since part of it already ran.
-		bool run_original = true;
+		// The interceptor runs the game's function itself, so after a fault it is not run again: part of it may already
+		// have run.
 		TRY_CLAUSE
 		{
-			run_original = process_event_service::interceptor(_this, function, parms);
-		} EXCEPT_CLAUSE
-
-		if (!run_original)
-			return;
-
-		TRY_CLAUSE
-		{
-			detour_base::get_original<hooks::process_event>()(_this, function, parms);
+			return process_event_service::interceptor(_this, function, parms);
 		} EXCEPT_CLAUSE
 	}
 }

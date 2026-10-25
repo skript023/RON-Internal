@@ -1,10 +1,14 @@
 #include "script.hpp"
+#include "utility/misc.hpp"
 #include "utility/player.hpp"
-#include "utility/weak_object.hpp"
+#include "events/entity_event.hpp"
+#include "commands/float_command.hpp"
+#include "commands/number_command.hpp"
 #include "commands/looped_command.hpp"
+#include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weak_object.hpp"
 
 namespace big
 {
@@ -12,16 +16,9 @@ namespace big
 	{
 		using looped_command::looped_command;
 
-		// The pawn this feature last toggled, so a respawned pawn gets god mode again but the same one is not toggled twice.
+		// The pawn this feature last toggled, so a new pawn, such as in the next mission, gets god mode again but the
+		// same one is not toggled twice.
 		weak_object<SDK::APlayerCharacter> m_toggled;
-
-		static void toggle(SDK::APlayerCharacter* c, SDK::APlayerController* controller)
-		{
-			if (controller->HasAuthority())
-				c->Server_ToggleGodMode();
-			else
-				c->ToggleGodMode();
-		}
 
 		void on_enable() override
 		{
@@ -34,18 +31,22 @@ namespace big
 			auto controller = unreal_engine::get_player_controller();
 			auto c = unreal_engine::get_character();
 
-			if (!c || !controller || c->bGodMode)
-				return;
-
-			if (m_toggled.get() != c)
+			if (c && controller && !c->bGodMode)
 			{
-				toggle(c, controller);
-				m_toggled = c;
-			}
+				if (m_toggled.get() != c)
+				{
+					if (controller->HasAuthority())
+						c->Server_ToggleGodMode();
+					else
+						c->ToggleGodMode();
 
-			// The host decides damage, so its flag alone is enough even if the toggle did nothing.
-			if (!c->bGodMode && controller->HasAuthority())
-				c->bGodMode = 1;
+					m_toggled = c;
+				}
+
+				// The host decides damage, so its flag alone is enough even if the toggle did nothing.
+				if (!c->bGodMode && controller->HasAuthority())
+					c->bGodMode = 1;
+			}
 		}
 
 		void on_disable() override
@@ -54,13 +55,16 @@ namespace big
 			auto c = unreal_engine::get_character();
 			m_toggled = {};
 
-			if (!c || !controller || !c->bGodMode)
-				return;
+			if (c && controller && c->bGodMode)
+			{
+				if (controller->HasAuthority())
+					c->Server_ToggleGodMode();
+				else
+					c->ToggleGodMode();
 
-			toggle(c, controller);
-
-			if (c->bGodMode && controller->HasAuthority())
-				c->bGodMode = 0;
+				if (c->bGodMode && controller->HasAuthority())
+					c->bGodMode = 0;
+			}
 		}
 	};
 

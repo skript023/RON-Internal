@@ -1,6 +1,7 @@
 #include "mission.hpp"
 #include "script.hpp"
 #include "commands/command.hpp"
+#include "commands/looped_command.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
@@ -337,4 +338,44 @@ namespace big
 	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, and reports everything", "{} actions done.", [] {
 		return mission::arrest_all() + mission::collect_evidence() + mission::report_all();
 	});
+
+	static bool has_given_penalty(const SDK::FScoreData& score)
+	{
+		for (const auto& penalty : score.Penalties)
+		{
+			if (penalty.bGiven)
+				return true;
+		}
+		return false;
+	}
+
+	// The game gives penalties from its own code, which a ProcessEvent hook does not see, so the host takes each one back
+	// through the scoring manager on its next tick; only the popup for it still shows.
+	class no_penalty : public looped_command
+	{
+		using looped_command::looped_command;
+
+		void on_tick() override
+		{
+			auto manager = ron::is_host() ? SDK::AScoringManager::Get() : nullptr;
+			if (!manager)
+				return;
+
+			// Gathered first: taking a penalty back changes the lists being walked.
+			std::vector<SDK::UScoringComponent*> penalised;
+			for (const auto& group : manager->ObjectiveScoreGroups)
+			{
+				for (const auto& score : group.Scores)
+				{
+					if (score.FromScoringComponent && has_given_penalty(score))
+						penalised.push_back(score.FromScoringComponent);
+				}
+			}
+
+			for (auto component : penalised)
+				manager->RevokeAllPenalties(component);
+		}
+	};
+
+	static no_penalty _no_penalty("no_penalty", "No Penalty", "Penalties, such as for unauthorised force, are taken back as soon as they are given (host only)");
 }

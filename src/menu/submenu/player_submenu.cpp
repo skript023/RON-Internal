@@ -15,7 +15,7 @@ namespace big
             sub->add_option<bool_slider_float_option>("bright_vision"_hash, "bright_vision_level"_hash, 0.5f);
             sub->add_option<bool_option<bool>>("infinite_ammo"_hash);
             sub->add_option<reguler_option>("add_magazine"_hash);
-            sub->add_option<bool_option<bool>>("infinite_grenades"_hash);
+            sub->add_option<bool_option<bool>>("infinite_tactical"_hash);
             sub->add_option<bool_option<bool>>("give_item_window"_hash);
             sub->add_option<bool_option<bool>>("damage"_hash);
             sub->add_option<bool_option<bool>>("no_recoil"_hash);

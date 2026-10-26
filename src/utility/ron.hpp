@@ -74,6 +74,30 @@ namespace big::ron
 		return value.TextData ? value.ToString() : std::string{};
 	}
 
+	// A new item of the given class in the character's inventory, which keeps it out of sight until it is drawn; one the
+	// inventory turns down is destroyed rather than left lying where it was spawned. Spawned items reach other players
+	// only from the host.
+	inline SDK::ABaseItem* give_item(SDK::AReadyOrNotCharacter* character, SDK::UClass* type)
+	{
+		if (!character->InventoryComp)
+			return nullptr;
+
+		SDK::FTransform at{};
+		at.Rotation.W = 1.0;
+		at.Translation = character->K2_GetActorLocation();
+		at.Scale3D = {1.0, 1.0, 1.0};
+		constexpr auto scale = SDK::ESpawnActorScaleMethod::MultiplyWithRoot;
+		auto actor = SDK::UGameplayStatics::BeginDeferredActorSpawnFromClass(character, type, at,
+		    SDK::ESpawnActorCollisionHandlingMethod::AlwaysSpawn, character, scale);
+		auto item = actor ? static_cast<SDK::ABaseItem*>(SDK::UGameplayStatics::FinishSpawningActor(actor, at, scale)) : nullptr;
+		if (item && !character->InventoryComp->AddInventoryItem(item))
+		{
+			item->K2_DestroyActor();
+			return nullptr;
+		}
+		return item;
+	}
+
 	inline const char* health_status_name(SDK::EPlayerHealthStatus status)
 	{
 		using enum SDK::EPlayerHealthStatus;

@@ -21,6 +21,7 @@ namespace big
             sub->add_option<bool_option<bool>>("no_recoil"_hash);
             sub->add_option<bool_option<bool>>("no_spread"_hash);
             sub->add_option<bool_slider_float_option>("rapid_fire"_hash, "fire_rate_mult"_hash, 0.5f);
+            sub->add_option<bool_option<bool>>("full_auto"_hash);
             sub->add_option<bool_option<bool>>("penetrate_wall"_hash);
             sub->add_option<bool_option<bool>>("instant_lockpick"_hash);
             sub->add_option<bool_option<bool>>("instant_cuff"_hash);

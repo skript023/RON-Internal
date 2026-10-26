@@ -12,7 +12,7 @@ Mission actions change what the host decides, so they work in single player or a
 
 | Tab | Features |
 | --- | --- |
-| Self | Godmode, No Stun, No Suppression, No Hit Effects, Bright Vision, Infinite Ammo, Add Magazine, Infinite Grenades, Instant Kill, No Recoil, No Spread, Rapid Fire, Wall Penetration, Instant Lockpick, Instant Cuff, Walk Speed, Noclip |
+| Self | Godmode, No Stun, No Suppression, No Hit Effects, Bright Vision, Infinite Ammo, Add Magazine, Infinite Grenades, Give Item panel of the loadout's weapons and gear by kind with their pictures, Instant Kill, No Recoil, No Spread, Rapid Fire, Wall Penetration, Instant Lockpick, Instant Cuff, Walk Speed, Noclip |
 | Mission | Mission Tracker overlay, Target Inspector, Collectibles panel, Objective Alerts, No Penalty; Auto Win, Arrest All, Surrender or Knock Out Suspects, Report All, Collect All Evidence, Unlock All Doors, Open All Doors, Disarm All Traps, Remove Door Wedges, Teleport to Next AI |
 | World | Slow Motion, Damage Multiplier, Freeze AI, AI Hold Fire, Objective and Evidence Markers, Infinite Squad Items, Reset Squad Stress |
 | Online Players (in Self) | Player Alerts for joins, leaves, and downed teammates; a page per player with health per limb, status, held item and ammo, distance, ping, and platform; Teleport to Player, Spectate, Mute; as host also Heal & Revive, Refill Ammo, Godmode, and Kick |

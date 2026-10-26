@@ -16,6 +16,7 @@ namespace big
             sub->add_option<bool_option<bool>>("infinite_ammo"_hash);
             sub->add_option<reguler_option>("add_magazine"_hash);
             sub->add_option<bool_option<bool>>("infinite_grenades"_hash);
+            sub->add_option<bool_option<bool>>("give_item_window"_hash);
             sub->add_option<bool_option<bool>>("damage"_hash);
             sub->add_option<bool_option<bool>>("no_recoil"_hash);
             sub->add_option<bool_option<bool>>("no_spread"_hash);

@@ -11,6 +11,7 @@
 #include "utility/weapon_backup.hpp"
 #include "utility/ron.hpp"
 #include "task_mgr.hpp"
+#include "hit_marker.hpp"
 
 namespace big
 {
@@ -98,14 +99,17 @@ namespace big
 
 		eExecutionStatus on_call(SDK::UObject* _this, SDK::UFunction* function, void* parms) override
 		{
-			const bool lethal = _damage.get_state();
-			if ((!lethal && !_damage_multiplier.get_state()) || !ron::is_host())
-				return eExecutionStatus::EXECUTION_CONTINUE;
-
 			auto params = static_cast<SDK::Params::ReadyOrNotCharacter_Multicast_TakeDamage*>(parms);
 			auto player = unreal_engine::get_character();
 			auto victim = static_cast<SDK::AReadyOrNotCharacter*>(_this);
 			if (!player || params->InstigatorCharacter != player || victim == player)
+				return eExecutionStatus::EXECUTION_CONTINUE;
+
+			// Every player in the lobby receives this multicast, so the hit marker works for clients too.
+			hit_marker::add(victim, params->Damage);
+
+			const bool lethal = _damage.get_state();
+			if ((!lethal && !_damage_multiplier.get_state()) || !ron::is_host())
 				return eExecutionStatus::EXECUTION_CONTINUE;
 			if (!victim->IsA(SDK::ACyberneticCharacter::StaticClass()) || victim->IsA(SDK::ASWATCharacter::StaticClass()))
 				return eExecutionStatus::EXECUTION_CONTINUE;

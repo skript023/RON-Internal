@@ -9,11 +9,16 @@ namespace big
         {
             sub->add_option<bool_option<bool>>("esp_activate"_hash);
             sub->add_option<number_option<float>>("esp_distance"_hash, 5.f, 0, true, "", " m");
+            sub->add_option<bool_slider_float_option>("radar"_hash, "radar_range"_hash, 5.f, 0);
+            sub->add_option<bool_option<bool>>("grenade_path"_hash);
+            sub->add_option<bool_option<bool>>("hit_marker"_hash);
 
             sub->add_option<bool_option<bool>>("esp_suspects"_hash);
             sub->add_option<bool_option<bool>>("esp_civilians"_hash);
             sub->add_option<bool_option<bool>>("esp_swat"_hash);
+            sub->add_option<bool_option<bool>>("esp_players"_hash);
             sub->add_option<bool_option<bool>>("esp_traps"_hash);
+            sub->add_option<bool_option<bool>>("esp_doors"_hash);
             sub->add_option<bool_option<bool>>("esp_evidence"_hash);
             sub->add_option<bool_option<bool>>("esp_reportables"_hash);
             sub->add_option<bool_option<bool>>("esp_collectibles"_hash);

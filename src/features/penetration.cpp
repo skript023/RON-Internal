@@ -42,7 +42,7 @@ namespace big
 
 		wep->CurrentAmmoType.PenetrationDistance = 100000;
 		wep->CurrentAmmoType.PenetrationLevel = 10;
-		wep->PenetrationDistance = 10000;
+		wep->PenetrationDistance = 10000; // Move this
 	}
 
 	static void restore_all()

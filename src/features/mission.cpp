@@ -1,6 +1,7 @@
 #include "mission.hpp"
 #include "script.hpp"
 #include "commands/command.hpp"
+#include "commands/looped_command.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
@@ -165,6 +166,32 @@ namespace big::mission
 		return count;
 	}
 
+	// The game will not open a locked door, so it is unlocked first. A door with a live trap stays shut rather than set
+	// the trap off, and one that cannot swing at all is left alone.
+	int open_doors()
+	{
+		auto gs = ron::game_state();
+		auto character = unreal_engine::get_character();
+		if (!gs || !character)
+			return 0;
+
+		int count = 0;
+		for (auto door : gs->AllDoors)
+		{
+			if (!unreal_engine::is_valid_actor(door) || door->GetMaxOpenAmount() <= 0.f || std::abs(door->GetOpenAmount()) > 1.f)
+				continue;
+			if (auto trap = door->GetAttachedTrap(); trap && trap->TrapStatus == SDK::ETrapState::TS_Live)
+				continue;
+
+			if (door->IsLocked())
+				set_door_locked(door, false);
+			// The angle it swings to, or 0 when it does not open.
+			if (door->OpenDoor(character, false, true, true) != 0.f)
+				++count;
+		}
+		return count;
+	}
+
 	static void disarm(SDK::ATrapActor* trap)
 	{
 		if (trap && trap->TrapStatus == SDK::ETrapState::TS_Live)
@@ -302,6 +329,7 @@ namespace big
 	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up", "{} surrendered.", mission::surrender_suspects);
 	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds", "{} knocked out.", mission::knockout_suspects);
 	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad", "{} doors unlocked.", mission::unlock_doors);
+	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut", "{} doors opened.", mission::open_doors);
 	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire", "{} traps disarmed.", mission::disarm_traps);
 	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge", "{} wedges removed.", mission::remove_wedges);
 	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure", "Teleported.", [] {
@@ -310,4 +338,44 @@ namespace big
 	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, and reports everything", "{} actions done.", [] {
 		return mission::arrest_all() + mission::collect_evidence() + mission::report_all();
 	});
+
+	static bool has_given_penalty(const SDK::FScoreData& score)
+	{
+		for (const auto& penalty : score.Penalties)
+		{
+			if (penalty.bGiven)
+				return true;
+		}
+		return false;
+	}
+
+	// The game gives penalties from its own code, which a ProcessEvent hook does not see, so the host takes each one back
+	// through the scoring manager on its next tick; only the popup for it still shows.
+	class no_penalty : public looped_command
+	{
+		using looped_command::looped_command;
+
+		void on_tick() override
+		{
+			auto manager = ron::is_host() ? SDK::AScoringManager::Get() : nullptr;
+			if (!manager)
+				return;
+
+			// Gathered first: taking a penalty back changes the lists being walked.
+			std::vector<SDK::UScoringComponent*> penalised;
+			for (const auto& group : manager->ObjectiveScoreGroups)
+			{
+				for (const auto& score : group.Scores)
+				{
+					if (score.FromScoringComponent && has_given_penalty(score))
+						penalised.push_back(score.FromScoringComponent);
+				}
+			}
+
+			for (auto component : penalised)
+				manager->RevokeAllPenalties(component);
+		}
+	};
+
+	static no_penalty _no_penalty("no_penalty", "No Penalty", "Penalties, such as for unauthorised force, are taken back as soon as they are given (host only)");
 }

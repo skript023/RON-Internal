@@ -4,6 +4,7 @@
 #include "utility/player.hpp"
 #include <features/features.hpp>
 #include "events/entity_event.hpp"
+#include "features/hit_marker.hpp"
 
 namespace big
 {
@@ -30,13 +31,18 @@ namespace big
         float center_x = screen_w * 0.5f;
         float center_y = screen_h * 0.5f;
 
+        // The aimbot takes targets up to this angle from the centre; from 90 degrees on that is past the screen edges.
+        if (aimbot_fov_deg >= 89.f)
+            return;
+
         float aimbot_rad = aimbot_fov_deg * (M_PI / 180.f);
         float camera_rad = camera_fov_deg * (M_PI / 180.f);
 
+        // The camera's FOV is horizontal, so it spans half the screen width either side of the centre.
         float radius =
             tanf(aimbot_rad) /
             tanf(camera_rad * 0.5f) *
-            (screen_h * 0.5f);
+            (screen_w * 0.5f);
 
         canvas::draw_circle(
             center_x,
@@ -89,13 +95,65 @@ namespace big
             255 };
         canvas::draw_line(x, data.box_y + data.box_h - filled, x, data.box_y + data.box_h, color, 2.f);
     }
+    // A top-down panel of what entity_event placed around you, your view pointing up. Something more than a floor above
+    // or below you is drawn as a ring.
+    static void draw_radar()
+    {
+        bool open = true;
+        if (canvas::begin_panel("Radar", &open, {.size = {260.f, 280.f}}))
+        {
+            const auto corner = ImGui::GetCursorScreenPos();
+            const auto size = ImGui::GetContentRegionAvail();
+            const float radius = (std::min)(size.x, size.y) * 0.5f - 4.f;
+            const ImVec2 centre{corner.x + size.x * 0.5f, corner.y + size.y * 0.5f};
+            if (radius > 8.f)
+            {
+                auto draw = ImGui::GetWindowDrawList();
+                const ImU32 grid = IM_COL32(255, 255, 255, 50);
+                draw->AddCircle(centre, radius, grid, 48);
+                draw->AddCircle(centre, radius * 0.5f, grid, 48);
+                draw->AddLine({centre.x, centre.y - radius}, {centre.x, centre.y + radius}, grid);
+                draw->AddLine({centre.x - radius, centre.y}, {centre.x + radius, centre.y}, grid);
+                draw->AddTriangleFilled({centre.x, centre.y - 7.f}, {centre.x - 5.f, centre.y + 5.f}, {centre.x + 5.f, centre.y + 5.f}, IM_COL32_WHITE);
+
+                const float scale = radius / features::_radar_range.get_state();
+                for (const auto& point : g_radar_data.view())
+                {
+                    const ImVec2 at{centre.x + point.right * scale, centre.y - point.forward * scale};
+                    const ImU32 color = IM_COL32(point.color.r, point.color.g, point.color.b, point.color.a);
+                    if (point.other_floor)
+                        draw->AddCircle(at, 3.5f, color, 12, 1.5f);
+                    else
+                        draw->AddCircleFilled(at, 3.5f, color);
+                }
+            }
+        }
+        canvas::end_panel();
+
+        // The close button switches the feature off, the same as the menu row.
+        if (!open)
+            features::_radar.set_state(false);
+    }
     void esp::draw_esp()
 	{
         if (features::_draw_fov.get_state())
             draw_aimbot_fov();
+        hit_marker::draw();
 
         if (!features::_esp_enabled.get_state())
             return;
+
+        if (features::_radar.get_state())
+            draw_radar();
+
+        static const Color arc_color = { 255, 220, 0, 255 };
+        for (const auto& line : g_grenade_path.view())
+        {
+            if (line.a.X == line.b.X && line.a.Y == line.b.Y)
+                canvas::draw_circle(line.a.X, line.a.Y, 5.f, arc_color, 16);
+            else
+                canvas::draw_line(line.a.X, line.a.Y, line.b.X, line.b.Y, arc_color, 2.f);
+        }
 
         const auto display = ImGui::GetIO().DisplaySize;
         const float width = display.x * 0.5f;

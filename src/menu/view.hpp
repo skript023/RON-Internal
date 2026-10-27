@@ -25,6 +25,7 @@ namespace big
 		static void target_inspector();
 		static void collectibles_panel();
 		static void bookmarks_panel();
+		static void give_item_panel();
 	public:
 		static void esp_submenu();
 		static void player_submenu();

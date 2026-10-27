@@ -41,4 +41,10 @@ namespace big::features
 	};
 
 	static script_tick _script_tick("Function Engine.ActorComponent.ReceiveTick");
+
+	// Engine.ActorComponent.ReceiveTick came only from a few components, such as one on the M4 SR, so holding another
+	// gun stopped every task. The player controller and the player's character override ReceiveTick in their own
+	// Blueprints and tick every frame.
+	static script_tick _controller_tick("Function BP_BaseController.BP_BaseController_C.ReceiveTick");
+	static script_tick _player_tick("Function BasePlayer.BasePlayer_C.ReceiveTick");
 }

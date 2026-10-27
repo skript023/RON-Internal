@@ -196,6 +196,7 @@ namespace big
 			float pitch{ 0.f };
 			float yaw{ 0.f };
 			bool has_target{ false };
+			// The key Aimbot Trigger Type 2 holds. Saved but not in the mod menu: the Astra loader sets it.
 			uint32_t trigger_key{ VK_XBUTTON1 };
 			SDK::FVector original_position{ 0.f, 0.f, 0.f };
 			SDK::FRotator original_rotation{ 0.f, 0.f, 0.f };
@@ -207,7 +208,7 @@ namespace big
 			};
 			int aimbot_target{0};
 
-			NLOHMANN_DEFINE_TYPE_INTRUSIVE(aimbot, pitch, yaw, aimbot_target, aimbot_targets)
+			NLOHMANN_DEFINE_TYPE_INTRUSIVE(aimbot, pitch, yaw, trigger_key, aimbot_target, aimbot_targets)
 		} aimbot;
 
 		struct system

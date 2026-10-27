@@ -30,16 +30,16 @@ namespace big
 		switch ((aimbot_trigger_mode)_aimbot_trigger.get_state())
 		{
 		case aimbot_trigger_mode::lbutton:
-			return GetAsyncKeyState(VK_LBUTTON);
+			return GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
 		case aimbot_trigger_mode::ads_only:
-			return false;//ch->IsAiming() || ch->IsADS();
+			return ch->bAiming;
 
 		case aimbot_trigger_mode::hotkey:
-			return GetAsyncKeyState(g_settings.aimbot.trigger_key);
+			return GetAsyncKeyState(g_settings.aimbot.trigger_key) & 0x8000;
 
 		case aimbot_trigger_mode::max:
-			return false;//GetAsyncKeyState(VK_LBUTTON) && (ch->IsAiming() || ch->IsADS());
+			return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) && ch->bAiming;
 		}
 
 		return false;
@@ -103,6 +103,8 @@ namespace big
 		case 2: return unreal_engine::get_location_bone(target_pawn, L"spine_1");
 		case 3: return unreal_engine::get_location_bone(target_pawn, L"pelvis");
 		}
+
+		return {};
 	}
 
 	class aimbot : public looped_command
@@ -116,7 +118,7 @@ namespace big
 			auto ch = unreal_engine::get_character();
 			auto chara_location = player::get_player_forward();
 			auto controller = unreal_engine::get_player_controller();
-			auto level = world->PersistentLevel;
+			auto level = world ? world->PersistentLevel : nullptr;
 			if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return;
 
 			auto own_state = controller->AcknowledgedPawn->PlayerState;
@@ -145,7 +147,7 @@ namespace big
 
 					if (!sus) continue;
 
-					if (!controller->LineOfSightTo(sus, player::get_player_coords(), false))
+					if (sus->IsSurrendered() || !controller->LineOfSightTo(sus, pov.Location, false))
 						continue;
 
 					auto h = sus->CharacterHealth;
@@ -191,14 +193,13 @@ namespace big
 			// ================= TRIGGERBOT =================
 			if (_triggerbot.get_state() && aimbot_angle < trigger_fov)
 			{
-				static float last_shot = 0.f;
+				// steady_clock, since the world's real time starts over on every map
+				static std::chrono::steady_clock::time_point last_shot{};
 
-				float time = SDK::UGameplayStatics::GetRealTimeSeconds(
-					SDK::UWorld::GetWorld()
-				);
+				const auto time = std::chrono::steady_clock::now();
 
 				// delay supaya gak full auto 1000rpm
-				if (time - last_shot > 0.05f)
+				if (time - last_shot > 50ms)
 				{
 					if (auto chara = unreal_engine::get_character())
 					{
@@ -260,8 +261,12 @@ namespace big
 						delta
 					);
 
-					// apply hasil smooth rotation
-					controller->SetControlRotation(smoothed);
+					// apply hasil smooth rotation: the step from the camera goes onto the control rotation, which recoil
+					// and sway keep apart from the camera
+					SDK::FRotator control_rot = controller->GetControlRotation();
+					control_rot.Pitch = normalize_angle(control_rot.Pitch + delta_angle(current_rot.Pitch, smoothed.Pitch));
+					control_rot.Yaw = normalize_angle(control_rot.Yaw + delta_angle(current_rot.Yaw, smoothed.Yaw));
+					controller->SetControlRotation(control_rot);
 				}
 			}
 		}
@@ -286,7 +291,7 @@ namespace big
 				auto ch = unreal_engine::get_character();
 				auto chara_location = player::get_player_forward();
 				auto controller = unreal_engine::get_player_controller();
-				auto level = world->PersistentLevel;
+				auto level = world ? world->PersistentLevel : nullptr;
 				if (!world || !controller || !controller->AcknowledgedPawn || !controller->PlayerCameraManager || !ch || !level) return eExecutionStatus::EXECUTION_CONTINUE;
 
 				auto own_state = controller->AcknowledgedPawn->PlayerState;
@@ -315,7 +320,7 @@ namespace big
 
 						if (!sus) continue;
 
-						if (!controller->LineOfSightTo(sus, player::get_player_coords(), false))
+						if (sus->IsSurrendered() || !controller->LineOfSightTo(sus, pov.Location, false))
 							continue;
 
 						auto h = sus->CharacterHealth;
@@ -367,6 +372,8 @@ namespace big
 
 				return eExecutionStatus::EXECUTION_CONTINUE;
 			}
+
+			return eExecutionStatus::EXECUTION_CONTINUE;
 		}
 	};
 

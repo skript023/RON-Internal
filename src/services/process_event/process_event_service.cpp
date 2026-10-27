@@ -38,7 +38,7 @@ namespace big
 		return hash;
 	}
 
-	bool process_event_service::interceptor_impl(SDK::UObject* _this, SDK::UFunction* function, void* parms)
+	void process_event_service::interceptor_impl(SDK::UObject* _this, SDK::UFunction* function, void* parms)
 	{
 		if (g_settings.debug.logging_process_event)
 			LOG(INFO) << function->GetFullName();
@@ -46,8 +46,14 @@ namespace big
 		auto func = function_hash(function);
 
 		if (auto command = commands::get_process_event(func); command)
-			return command->call(_this, function, parms) != eExecutionStatus::EXECUTION_INTERCEPTED;
+		{
+			if (auto status = command->call(_this, function, parms); status == eExecutionStatus::EXECUTION_INTERCEPTED)
+			{
+				return;
+			}
+		}
 
-		return true;
+		return detour_base::get_original<hooks::process_event>()(_this, function, parms);
+		//return g_hooking->m_process_event_hook.get_original<decltype(&hooks::process_event)>(SDK::Offsets::ProcessEventIdx)(_this, function, parms);
 	}
 }

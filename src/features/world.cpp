@@ -54,15 +54,133 @@ namespace big
 		toggler_t m_toggle;
 	};
 
-	static debug_toggle _freeze_ai("freeze_ai", "Freeze AI", "AI stop moving",
-	    [](debug_subsystem* s) -> bool { return s->bDisableAIMovement; },
-	    [](debug_subsystem* s, bool on) { s->bDisableAIMovement = on; },
-	    [](debug_subsystem* s) { s->ToggleAIMovement(); });
+	// The debug subsystem's AI movement and AI targeting switches did nothing in the shipping game, so these two work on
+	// the characters themselves.
 
-	static debug_toggle _ai_ignore("ai_ignore", "AI Hold Fire", "AI stop picking targets",
-	    [](debug_subsystem* s) -> bool { return s->bDisableAITargeting; },
-	    [](debug_subsystem* s, bool on) { s->bDisableAITargeting = on; },
-	    [](debug_subsystem* s) { s->ToggleAITargeting(); });
+	// Each AI a feature changed, listed once however often the game undoes the change, so turning it off puts each one
+	// back. Anyone the engine freed since, such as on a level change, is dropped.
+	static void track(std::vector<weak_object<SDK::ACyberneticCharacter>>& changed, SDK::ACyberneticCharacter* ai)
+	{
+		std::erase_if(changed, [](const auto& entry) { return !entry; });
+
+		const weak_object<SDK::ACyberneticCharacter> entry(ai);
+		if (std::ranges::find(changed, entry) == changed.end())
+			changed.push_back(entry);
+	}
+
+	// Suspects and civilians stop moving: movement off on each one, back to walking afterwards. AI moves on the host,
+	// so only the host freezes it; the squad keeps moving.
+	class freeze_ai : public looped_command
+	{
+		using looped_command::looped_command;
+
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_frozen;
+
+		void on_tick() override
+		{
+			if (!ron::is_host())
+				return;
+
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->IsA(SDK::ASWATCharacter::StaticClass()) || !ron::is_active(ai))
+					return;
+
+				auto movement = ai->CharacterMovement;
+				if (!movement || movement->MovementMode == SDK::EMovementMode::MOVE_None)
+					return;
+
+				movement->DisableMovement();
+				track(m_frozen, ai);
+			});
+		}
+
+		void on_disable() override
+		{
+			for (const auto& entry : m_frozen)
+			{
+				auto ai = entry.get();
+				if (ai && ron::is_active(ai) && ai->CharacterMovement && ai->CharacterMovement->MovementMode == SDK::EMovementMode::MOVE_None)
+					ai->CharacterMovement->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0);
+			}
+			m_frozen.clear();
+		}
+	};
+
+	static freeze_ai _freeze_ai("freeze_ai", "Freeze AI", "Suspects and civilians stop moving (host only)");
+
+	// Suspects pick no target: the player's own no-target cheat, toggled the way god mode is, and the same flag on the
+	// squad. The host decides who the AI may target, so there the flags alone are enough even if the toggle did nothing.
+	class ai_hold_fire : public looped_command
+	{
+		using looped_command::looped_command;
+
+		// The pawn this feature last toggled, so a respawned pawn is toggled again but the same one is not toggled twice.
+		weak_object<SDK::APlayerCharacter> m_toggled;
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_squad;
+
+		static void toggle(SDK::APlayerCharacter* c, SDK::APlayerController* controller)
+		{
+			if (controller->HasAuthority())
+				c->Server_ToggleNoTarget();
+			else
+				c->ToggleNoTarget();
+		}
+
+		void on_enable() override
+		{
+			m_toggled = {};
+			on_tick();
+		}
+
+		void on_tick() override
+		{
+			auto controller = unreal_engine::get_player_controller();
+			auto c = unreal_engine::get_character();
+			if (!c || !controller)
+				return;
+
+			if (!c->bNoTarget && m_toggled.get() != c)
+			{
+				toggle(c, controller);
+				m_toggled = c;
+			}
+
+			if (!controller->HasAuthority())
+				return;
+
+			c->bNoTarget = true;
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->IsA(SDK::ASWATCharacter::StaticClass()) && !ai->bNoTarget)
+				{
+					ai->bNoTarget = true;
+					track(m_squad, ai);
+				}
+			});
+		}
+
+		void on_disable() override
+		{
+			auto controller = unreal_engine::get_player_controller();
+			auto c = unreal_engine::get_character();
+			m_toggled = {};
+
+			if (c && controller && c->bNoTarget)
+			{
+				toggle(c, controller);
+				if (c->bNoTarget && controller->HasAuthority())
+					c->bNoTarget = false;
+			}
+
+			for (const auto& member : m_squad)
+			{
+				if (auto ai = member.get())
+					ai->bNoTarget = false;
+			}
+			m_squad.clear();
+		}
+	};
+
+	static ai_hold_fire _ai_ignore("ai_ignore", "AI Hold Fire", "Suspects target neither you nor your squad");
 
 	static debug_toggle _objective_markers("objective_markers", "Objective Markers", "The game's markers on every objective",
 	    [](debug_subsystem* s) -> bool { return s->bShowObjectiveMarkers; },
@@ -109,55 +227,22 @@ namespace big
 
 	static slow_motion _slow_motion("slow_motion", "Slow Motion", "Slows the whole game down (host only)");
 
-	static float_command _damage_scale("damage_scale", "Damage Scale", "Weapon damage while Damage Multiplier is on", 0.1f, 10.f, 2.f);
-
-	class damage_multiplier : public looped_command
-	{
-		using looped_command::looped_command;
-
-		void on_tick() override
-		{
-			auto subsystem = ron::debug_subsystem();
-			if (!subsystem)
-				return;
-
-			const float scale = _damage_scale.get_state();
-			if (subsystem->GlobalDamageMultiplier_Weapons != scale)
-			{
-				subsystem->SetGlobalDamageMultiplier_Weapons(scale);
-				subsystem->GlobalDamageMultiplier_Weapons = scale;
-			}
-			if (!subsystem->bApplyGlobalDamageMultiplier_Weapons)
-			{
-				subsystem->ToggleGlobalDamageMultiplier_Weapons();
-				subsystem->bApplyGlobalDamageMultiplier_Weapons = 1;
-			}
-		}
-
-		void on_disable() override
-		{
-			auto subsystem = ron::debug_subsystem();
-			if (!subsystem || !subsystem->bApplyGlobalDamageMultiplier_Weapons)
-				return;
-
-			subsystem->ToggleGlobalDamageMultiplier_Weapons();
-			subsystem->bApplyGlobalDamageMultiplier_Weapons = 0;
-		}
-	};
-
-	static damage_multiplier _damage_multiplier("damage_multiplier", "Damage Multiplier", "Scales the damage every weapon deals");
-
 	class reset_roster_stress : public command
 	{
 		using command::command;
 
 		void on_call() override
 		{
-			if (auto controller = ron::controller())
+			// Officers' stress belongs to the Commander roster; outside it the call changes nothing.
+			auto controller = ron::controller();
+			if (!controller || !SDK::UBpGameplayHelperLib::IsCommanderMode(controller))
 			{
-				controller->SetRosterStressValue(0.f);
-				notification::success(get_label(), "Squad stress reset.");
+				notification::warning(get_label(), "Only works in Commander mode.");
+				return;
 			}
+
+			controller->SetRosterStressValue(0.f);
+			notification::success(get_label(), "Squad stress reset.");
 		}
 	};
 

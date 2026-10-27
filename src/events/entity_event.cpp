@@ -147,6 +147,7 @@ namespace big
 		case esp_kind::civilian: return _esp_civilians.get_state();
 		case esp_kind::swat: return _esp_swat.get_state();
 		case esp_kind::trap: return _esp_traps.get_state();
+		case esp_kind::door: return _esp_doors.get_state();
 		case esp_kind::evidence_weapon:
 		case esp_kind::evidence: return _esp_evidence.get_state();
 		case esp_kind::reportable: return _esp_reportables.get_state();
@@ -196,6 +197,21 @@ namespace big
 
 				auto name = ron::text(reportable->ReportableName);
 				add(esp_kind::reportable, reportable, name.empty() ? "Reportable" : name, { 0, 200, 255, 255 });
+			}
+		}
+
+		// A door's trap is drawn with the other traps; this shows what else stops it opening.
+		if (_esp_doors.get_state())
+		{
+			for (auto door : gs->AllDoors)
+			{
+				if (!unreal_engine::is_valid_actor(door))
+					continue;
+
+				const bool locked = door->IsLocked();
+				const bool wedged = door->GetAttachedWedge() != nullptr;
+				if (locked || wedged)
+					add(esp_kind::door, door, locked && wedged ? "Locked, Wedged" : locked ? "Locked" : "Wedged", { 235, 235, 235, 255 });
 			}
 		}
 
@@ -344,14 +360,69 @@ namespace big
 		{
 		case esp_kind::suspect: return { 255, 0, 0, 255 };
 		case esp_kind::civilian: return { 0, 255, 0, 255 };
+		case esp_kind::player: return { 0, 230, 230, 255 };
 		default: return { 80, 160, 255, 255 };
+		}
+	}
+
+	// Where the grenade in your hand would fly if thrown now, up to what it first hits. Measured from thrown flashbangs,
+	// stingers and CS gas: it leaves about 64 cm in front of the camera along your aim, which the camera's sway can be a
+	// degree off, at ThrowImpulse plus UpImpulse straight up, both over its 0.16 kg, then falls at 980 cm/s² against a
+	// slight air drag. Its bounces are left out: it spins as it flies, so the same kind of hit sent it on along a wall in
+	// one throw and dropped it dead in the next. Traced piece by piece, 4 s at most, as a ball of its size: where it hits
+	// a floor its centre sits about 4 cm up, and a line misses what it only grazes.
+	static void build_grenade_path(SDK::APlayerController* controller, std::vector<bone_line>& arc)
+	{
+		auto character = unreal_engine::get_character();
+		auto item = character ? character->GetEquippedItem() : nullptr;
+		if (!item || !item->IsA(SDK::ABaseGrenade::StaticClass()) || !controller->PlayerCameraManager)
+			return;
+
+		const auto grenade = static_cast<SDK::ABaseGrenade*>(item);
+		const auto aim = SDK::UKismetMathLibrary::GetForwardVector(controller->ControlRotation);
+		const auto start = controller->PlayerCameraManager->CameraCachePrivate.POV.Location + aim * 64.0;
+		auto velocity = aim * (grenade->ThrowImpulse / 0.16);
+		velocity.Z += grenade->UpImpulse / 0.16;
+		const auto pull = SDK::FVector(0.0, 0.0, -980.0) - velocity * 0.01;
+
+		constexpr double step = 1.0 / 30.0;
+		auto from = start;
+		SDK::FVector2D from_screen;
+		bool from_shown = controller->ProjectWorldLocationToScreen(from, &from_screen, false);
+		for (double t = step; t <= 4.0; t += step)
+		{
+			auto to = start + velocity * t + pull * (0.5 * t * t);
+			SDK::FHitResult hit{};
+			const bool blocked = SDK::UKismetSystemLibrary::SphereTraceSingle(character, from, to, 4.f, SDK::ETraceTypeQuery::TraceTypeQuery1, false,
+			    {}, SDK::EDrawDebugTrace::None, &hit, true, {}, {}, 0.f);
+			if (blocked)
+				to = hit.Location;
+
+			SDK::FVector2D to_screen;
+			const bool to_shown = controller->ProjectWorldLocationToScreen(to, &to_screen, false);
+			if (from_shown && to_shown)
+				arc.push_back({ from_screen, to_screen });
+			if (blocked)
+			{
+				if (to_shown)
+					arc.push_back({ to_screen, to_screen });
+				return;
+			}
+
+			from = to;
+			from_screen = to_screen;
+			from_shown = to_shown;
 		}
 	}
 
 	static void build_frame()
 	{
 		auto& back = g_esp_data.back();
+		auto& radar = g_radar_data.back();
+		auto& arc = g_grenade_path.back();
 		back.clear();
+		radar.clear();
+		arc.clear();
 
 		auto gs = ron::game_state();
 		auto controller = unreal_engine::get_player_controller();
@@ -359,8 +430,13 @@ namespace big
 		{
 			g_static_targets.clear();
 			g_esp_data.publish();
+			g_radar_data.publish();
+			g_grenade_path.publish();
 			return;
 		}
+
+		if (_grenade_path.get_state())
+			build_grenade_path(controller, arc);
 
 		static auto last_scan = std::chrono::steady_clock::time_point{};
 		static const void* last_game_state = nullptr;
@@ -375,12 +451,28 @@ namespace big
 		const auto origin = player::get_player_coords();
 		const float max_distance = _esp_distance.get_state();
 
+		// Recorded before the ESP's own distance and screen checks, since the radar also shows what is behind you.
+		const bool radar_on = _radar.get_state();
+		const float radar_range = _radar_range.get_state();
+		const double yaw = controller->ControlRotation.Yaw * (M_PI / 180.0);
+		const double cos_yaw = std::cos(yaw);
+		const double sin_yaw = std::sin(yaw);
+		auto add_radar = [&](const SDK::FVector& location, float distance, Color color) {
+			if (!radar_on || distance > radar_range)
+				return;
+
+			const auto delta = location - origin;
+			radar.push_back({ static_cast<float>((delta.X * cos_yaw + delta.Y * sin_yaw) / 100.0),
+			    static_cast<float>((delta.Y * cos_yaw - delta.X * sin_yaw) / 100.0), std::abs(delta.Z) > 250.0, color });
+		};
+
 		for (const auto& target : g_static_targets)
 		{
 			if (!kind_enabled(target.kind))
 				continue;
 
 			const float distance = origin.GetDistanceToInMeters(target.location);
+			add_radar(target.location, distance, target.color);
 			if (distance > max_distance)
 				continue;
 
@@ -399,15 +491,12 @@ namespace big
 
 		const bool want_box = _draw_box.get_state() || _draw_corner_box.get_state() || _draw_health.get_state();
 
-		for_each_persistent_character([&](SDK::ACyberneticCharacter* character, esp_kind kind) {
-			if (!character->Class)
-				return;
-
-			if (!kind_enabled(kind))
-				return;
-
+		auto add_character = [&](SDK::AReadyOrNotCharacter* character, esp_kind kind, std::string_view name) {
 			auto location = character->K2_GetActorLocation();
 			const float distance = origin.GetDistanceToInMeters(location);
+			const auto status = character->CharacterHealth ? character->CharacterHealth->HealthStatus : SDK::EPlayerHealthStatus::HS_NotAvailable;
+			const auto color = character_color(kind, status);
+			add_radar(location, distance, color);
 			if (distance > max_distance)
 				return;
 
@@ -419,14 +508,12 @@ namespace big
 			if (!controller->ProjectWorldLocationToScreen(location, &screen, false))
 				return;
 
-			const auto status = character->CharacterHealth ? character->CharacterHealth->HealthStatus : SDK::EPlayerHealthStatus::HS_NotAvailable;
-
 			esp_data data{};
 			data.kind = kind;
 			data.screen = screen;
 			data.distance = distance;
-			data.color = character_color(kind, status);
-			data.display_text = std::format("{} [{}] [{:.0f}m]", ron::team_name(character), ron::health_status_name(status), distance);
+			data.color = color;
+			data.display_text = std::format("{} [{}] [{:.0f}m]", name, ron::health_status_name(status), distance);
 
 			if (_draw_health.get_state())
 			{
@@ -434,7 +521,8 @@ namespace big
 				data.max_health = character->GetMaxHealth();
 			}
 
-			if (_draw_skeleton.get_state())
+			// The bone pairs are for the AI's meshes only.
+			if (_draw_skeleton.get_state() && kind != esp_kind::player)
 				data.has_skeleton = build_skeleton(character, controller, data.skeleton);
 			if (want_box)
 				data.has_box = build_box(character, controller, data.box_x, data.box_y, data.box_w, data.box_h);
@@ -442,9 +530,26 @@ namespace big
 				data.has_box_3d = build_box_3d(character, controller, data.box_3d);
 
 			back.push_back(std::move(data));
+		};
+
+		for_each_persistent_character([&](SDK::ACyberneticCharacter* character, esp_kind kind) {
+			if (character->Class && kind_enabled(kind))
+				add_character(character, kind, ron::team_name(character));
 		});
 
+		if (_esp_players.get_state())
+		{
+			auto self = unreal_engine::get_character();
+			for (auto character : gs->AllPlayerCharacters)
+			{
+				if (unreal_engine::is_valid_actor(character) && character != self && character->PlayerState)
+					add_character(character, esp_kind::player, character->PlayerState->PlayerNamePrivate.ToString());
+			}
+		}
+
 		g_esp_data.publish();
+		g_radar_data.publish();
+		g_grenade_path.publish();
 	}
 
 	// A fault reading one actor skips this frame instead of ending the worker for the rest of the session.
@@ -472,6 +577,8 @@ namespace big
 			else if (had_data)
 			{
 				g_esp_data.clear_all();
+				g_radar_data.clear_all();
+				g_grenade_path.clear_all();
 				g_static_targets.clear();
 				had_data = false;
 			}
@@ -480,6 +587,8 @@ namespace big
 		}
 
 		g_esp_data.clear_all();
+		g_radar_data.clear_all();
+		g_grenade_path.clear_all();
 		co_return;
 	}
 }

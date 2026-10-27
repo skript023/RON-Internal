@@ -8,7 +8,10 @@ FetchContent_Declare(
     GIT_PROGRESS TRUE
 )
 
-FetchContent_MakeAvailable(discord)
+FetchContent_GetProperties(discord)
+if(NOT discord_POPULATED)
+    FetchContent_Populate(discord)
+endif()
 
 # Find all source files
 file(GLOB_RECURSE DISCORD_RPC_SRC
@@ -19,10 +22,14 @@ file(GLOB_RECURSE DISCORD_RPC_SRC
 # Exclude files with the `_unix` prefix in their filename
 list(FILTER DISCORD_RPC_SRC EXCLUDE REGEX "_unix\\.cpp$")
 list(FILTER DISCORD_RPC_SRC EXCLUDE REGEX "_linux\\.cpp$")
+list(FILTER DISCORD_RPC_SRC EXCLUDE REGEX "dllmain\\.cpp$")
 
 add_library(discord STATIC ${DISCORD_RPC_SRC})
 
-target_include_directories(discord PRIVATE "${discord_SOURCE_DIR}/include")
+target_include_directories(discord PRIVATE
+    "${discord_SOURCE_DIR}/include"
+    "${discord_SOURCE_DIR}/src"
+)
 
 # Ensure WIN32_LEAN_AND_MEAN is undefined for this target
 target_compile_definitions(discord PRIVATE -UWIN32_LEAN_AND_MEAN)

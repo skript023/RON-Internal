@@ -177,13 +177,30 @@ namespace big
 
 		// The pawn that was stopped, so turning off lets only that one walk again.
 		weak_object<SDK::APlayerCharacter> m_character;
+		// The pawn flown as a client, which the host flies too.
+		weak_object<SDK::APlayerCharacter> m_flown;
 
 		void on_tick() override
 		{
 			auto c = unreal_engine::get_character();
 			auto controller = unreal_engine::get_player_controller();
-			if (!c || !c->CharacterMovement || !controller || !controller->HasAuthority() || !ron::is_active(c))
+			if (!c || !c->CharacterMovement || !controller || !ron::is_active(c))
 				return;
+
+			// As a client, only when the host runs this mod: see host_link::fly. Space and Ctrl go up and down.
+			if (!controller->HasAuthority())
+			{
+				if (!host_link::ready())
+					return;
+
+				host_link::fly(c, _noclip_speed.get_state());
+				m_flown = c;
+				if (unreal_engine::is_key_pressed(VK_SPACE))
+					c->AddMovementInput(SDK::FVector(0.0, 0.0, 1.0), 1.f, false);
+				if (unreal_engine::is_key_pressed(VK_LCONTROL))
+					c->AddMovementInput(SDK::FVector(0.0, 0.0, -1.0), 1.f, false);
+				return;
+			}
 
 			if (c->CharacterMovement->MovementMode != SDK::EMovementMode::MOVE_None)
 				c->CharacterMovement->DisableMovement();
@@ -211,8 +228,17 @@ namespace big
 			if (c && ron::is_active(c) && c->CharacterMovement && c->CharacterMovement->MovementMode == SDK::EMovementMode::MOVE_None)
 				c->CharacterMovement->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0);
 			m_character = {};
+
+			if (auto flown = m_flown.get())
+				host_link::land(flown);
+			m_flown = {};
 		}
 	};
 
 	static noclip _noclip("noclip", "Noclip", "Fly where you look, through walls; turning it off inside a wall can leave you stuck (host only)");
+
+	static host_link::client_toggle _noclip_for_clients("noclip"_hash, [](SDK::APlayerCharacter* c, float speed) {
+		if (ron::is_active(c))
+			host_link::fly(c, speed);
+	}, host_link::land, [] { return _noclip_speed.get_state(); });
 }

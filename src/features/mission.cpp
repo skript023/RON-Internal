@@ -1,4 +1,5 @@
 #include "mission.hpp"
+#include "host_link.hpp"
 #include "script.hpp"
 #include "commands/command.hpp"
 #include "commands/looped_command.hpp"
@@ -251,13 +252,12 @@ namespace big::mission
 		return count;
 	}
 
-	bool teleport_to_next_ai()
+	bool teleport_to_next_ai(SDK::APlayerCharacter* player)
 	{
-		auto player = unreal_engine::get_character();
 		if (!player)
 			return false;
 
-		const auto origin = player::get_player_coords();
+		const auto origin = player->K2_GetActorLocation();
 		SDK::ACyberneticCharacter* nearest = nullptr;
 		float nearest_distance = std::numeric_limits<float>::max();
 
@@ -285,7 +285,8 @@ namespace big::mission
 
 		auto location = nearest->K2_GetActorLocation();
 		location.Z += 100.f;
-		player::set_player_coords(location, player::get_player_rotation());
+		const auto rotation = player->K2_GetActorRotation();
+		player->Server_TeleportPlayerToLocation(location, SDK::FVector(rotation.Pitch, rotation.Yaw, rotation.Roll));
 		return true;
 	}
 }
@@ -308,8 +309,11 @@ namespace big
 	protected:
 		void on_call() override
 		{
-			if (!ron::require_host(get_label()))
+			if (!ron::is_host())
+			{
+				host_link::run(get_name(), get_label());
 				return;
+			}
 
 			const int count = m_action();
 			if (count > 0)
@@ -333,7 +337,12 @@ namespace big
 	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire (host only)", "{} traps disarmed.", mission::disarm_traps);
 	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge (host only)", "{} wedges removed.", mission::remove_wedges);
 	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure (host only)", "Teleported.", [] {
-		return mission::teleport_to_next_ai() ? 1 : 0;
+		return mission::teleport_to_next_ai(unreal_engine::get_character()) ? 1 : 0;
+	});
+
+	// As the host: moves the client that asked, not the host.
+	static host_link::client_action _teleport_next_ai_for_clients("teleport_next_ai", "Teleport to Next AI", [](SDK::APlayerCharacter* c, const std::string&) {
+		return mission::teleport_to_next_ai(c);
 	});
 	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, and reports everything (host only)", "{} actions done.", [] {
 		return mission::arrest_all() + mission::collect_evidence() + mission::report_all();

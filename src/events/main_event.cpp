@@ -6,6 +6,7 @@
 #include "settings/hotkeys.hpp"
 #include "settings/settings.hpp"
 #include "utility/ron.hpp"
+#include "features/host_link.hpp"
 
 namespace big
 {
@@ -25,7 +26,8 @@ namespace big
 		for (const auto hash : host_only)
 		{
 			auto toggle = commands::get_bool_command(hash);
-			if (!toggle || !toggle->get_state())
+			// Freeze AI and the other world toggles stay on when the host runs them for you.
+			if (!toggle || !toggle->get_state() || host_link::forwards(hash))
 				continue;
 			toggle->set_state(false);
 			turned_off += (turned_off.empty() ? "" : ", ") + toggle->get_label();
@@ -41,6 +43,7 @@ namespace big
 		hotkeys::tick(g_pointers->m_hwnd);
 
 		turn_off_host_only();
+		host_link::tick();
 		commands::run_looped_command();
 	}
 

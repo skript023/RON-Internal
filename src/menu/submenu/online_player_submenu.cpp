@@ -18,6 +18,8 @@ namespace big
 		canvas::add_submenu<regular_submenu>("Online Players", "SubmenuPlayerList"_hash, [](regular_submenu* sub)
 		{
 			sub->add_option<bool_option<bool>>("player_alerts"_hash);
+			sub->add_option<bool_option<bool>>("accept_client_requests"_hash);
+			sub->add_option<reguler_option>("host_link_ping"_hash);
 			if (player_event::is_spectating())
 				sub->add_option<reguler_option>("Stop Spectating", "Brings the camera back to you", [] { player_event::stop_spectating(); });
 

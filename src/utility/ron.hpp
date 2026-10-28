@@ -160,5 +160,23 @@ namespace big::ron
 			if (auto character = characters[i]; unreal_engine::is_valid_actor(character))
 				callback(character);
 		}
+
+		// The game state's list is not replicated, so a client may find it empty; there the AI are read from the loaded
+		// levels instead.
+		auto world = SDK::UWorld::GetWorld();
+		if (characters.Num() > 0 || is_host() || !world)
+			return;
+
+		for (auto level : world->Levels)
+		{
+			if (!level)
+				continue;
+
+			for (auto actor : level->Actors)
+			{
+				if (unreal_engine::is_valid_actor(actor) && actor->IsA(SDK::ACyberneticCharacter::StaticClass()))
+					callback(static_cast<SDK::ACyberneticCharacter*>(actor));
+			}
+		}
 	}
 }

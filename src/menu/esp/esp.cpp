@@ -173,6 +173,8 @@ namespace big
                 {
                     canvas::draw_line(line.a.X, line.a.Y, line.b.X, line.b.Y, white, 1.f);
                 }
+                if (data.head_radius > 0.f)
+                    canvas::draw_circle(data.head.X, data.head.Y, data.head_radius, white, 16);
             }
             if (features::_draw_corner_box.get_state() && data.has_box)
                 canvas::draw_corner_box(data.box_x, data.box_y, data.box_w, data.box_h, 1.5f, data.color);

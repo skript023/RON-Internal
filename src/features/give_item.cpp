@@ -3,6 +3,7 @@
 #include "renderer.hpp"
 #include "task_mgr.hpp"
 #include "utility/ron.hpp"
+#include "host_link.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/Engine_parameters.hpp"
 
@@ -177,9 +178,6 @@ namespace big
 
 	static void give(const item_entry& entry)
 	{
-		if (!ron::require_host(_give_item_window.get_label()))
-			return;
-
 		auto c = unreal_engine::get_character();
 		if (!c)
 		{
@@ -197,11 +195,24 @@ namespace big
 			return;
 		}
 
+		// Items reach other players only from the host, so a client asks the host for the same class by its name.
+		if (!ron::is_host())
+		{
+			host_link::run("give_item", _give_item_window.get_label(), type->GetFullName());
+			return;
+		}
+
 		if (ron::give_item(c, type))
 			notification::success(_give_item_window.get_label(), std::format("{} is in your inventory.", entry.name));
 		else
 			notification::warning(_give_item_window.get_label(), std::format("Your inventory did not take the {}.", entry.name));
 	}
+
+	// As the host: the item a client picked, put in that client's inventory; only an item class is spawned.
+	static host_link::client_action _give_item_for_clients("give_item", "Give Item", [](SDK::APlayerCharacter* c, const std::string& type) {
+		auto item = c ? SDK::UObject::FindClass(type) : nullptr;
+		return item && item->IsSubclassOf(SDK::ABaseItem::StaticClass()) && ron::give_item(c, item) != nullptr;
+	});
 
 	void view::give_item_panel()
 	{

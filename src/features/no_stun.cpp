@@ -2,14 +2,29 @@
 #include "utility/weak_object.hpp"
 #include "commands/looped_command.hpp"
 #include "process_event/process_event.hpp"
+#include "host_link.hpp"
 #include "SDK/Engine_parameters.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
 
 namespace big
 {
+	static void end_stuns(SDK::APlayerCharacter* c, float)
+	{
+		if (!c->IsStunned())
+			return;
+
+		for (int i = 1; i < static_cast<int>(SDK::EStunType::ST_MAX); i++)
+		{
+			const auto type = static_cast<SDK::EStunType>(i);
+			if (c->IsStunnedWith(type))
+				c->EndStun(type);
+		}
+	}
+
 	// The host starts every stun in native code, so it cannot be blocked there; the host ends it on the next tick
-	// instead. A client only stops its own screen effects, below, while the host's stun still slows it down.
+	// instead. A client only stops its own screen effects, below, while the host's stun still slows it down, unless the
+	// host runs this mod and ends the client's stuns too.
 	class no_stun : public looped_command
 	{
 		using looped_command::looped_command;
@@ -18,17 +33,12 @@ namespace big
 		{
 			auto controller = unreal_engine::get_player_controller();
 			auto c = unreal_engine::get_character();
-			if (!c || !controller || !controller->HasAuthority() || !c->IsStunned())
-				return;
-
-			for (int i = 1; i < static_cast<int>(SDK::EStunType::ST_MAX); i++)
-			{
-				const auto type = static_cast<SDK::EStunType>(i);
-				if (c->IsStunnedWith(type))
-					c->EndStun(type);
-			}
+			if (c && controller && controller->HasAuthority())
+				end_stuns(c, 0.f);
 		}
 	};
+
+	static host_link::client_toggle _no_stun_for_clients("no_stun"_hash, end_stuns);
 
 	static no_stun _no_stun("no_stun", "No Stun", "Flashbangs, gas, tasers, pepper spray and less-lethal rounds do not stun you; as a client only their screen effects stop");
 	static bool_command _no_suppression("no_suppression", "No Suppression", "Gunfire and explosions near you do not blur or shake your screen", false);

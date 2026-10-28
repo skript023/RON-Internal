@@ -41,5 +41,5 @@ namespace big
         }
     };
 
-    static add_magazine _add_magazine("add_magazine", "Add Magazine", "Adds a full magazine of the loaded ammo to the gun in hand");
+    static add_magazine _add_magazine("add_magazine", "Add Magazine", "Adds a full magazine of the loaded ammo to the gun in hand (host only)");
 }

@@ -68,7 +68,7 @@ namespace big
 		}
 	};
 
-	static damage _damage("damage", "Instant Kill", "Every hit from your weapon is lethal");
+	static damage _damage("damage", "Instant Kill", "Every hit from your weapon is lethal (host only)");
 
 	static float_command _damage_scale("damage_scale", "Damage Scale", "How hard your gun hits while Damage Multiplier is on", 0.1f, 10.f, 2.f);
 

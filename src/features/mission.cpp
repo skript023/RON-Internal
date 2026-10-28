@@ -323,19 +323,19 @@ namespace big
 		action_t m_action;
 	};
 
-	static mission_action _auto_arrest("auto_arrest", "Arrest All", "Cuffs every suspect and civilian and reports them", "{} arrested.", mission::arrest_all);
-	static mission_action _report_all("report_all", "Report All", "Reports everyone arrested or down, and every reportable item, to TOC", "{} reported.", mission::report_all);
-	static mission_action _collect_evidence("collect_evidence", "Collect All Evidence", "Picks up every dropped weapon and piece of evidence", "{} collected.", mission::collect_evidence);
-	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up", "{} surrendered.", mission::surrender_suspects);
-	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds", "{} knocked out.", mission::knockout_suspects);
-	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad", "{} doors unlocked.", mission::unlock_doors);
-	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut", "{} doors opened.", mission::open_doors);
-	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire", "{} traps disarmed.", mission::disarm_traps);
-	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge", "{} wedges removed.", mission::remove_wedges);
-	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure", "Teleported.", [] {
+	static mission_action _auto_arrest("auto_arrest", "Arrest All", "Cuffs every suspect and civilian and reports them (host only)", "{} arrested.", mission::arrest_all);
+	static mission_action _report_all("report_all", "Report All", "Reports everyone arrested or down, and every reportable item, to TOC (host only)", "{} reported.", mission::report_all);
+	static mission_action _collect_evidence("collect_evidence", "Collect All Evidence", "Picks up every dropped weapon and piece of evidence (host only)", "{} collected.", mission::collect_evidence);
+	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up (host only)", "{} surrendered.", mission::surrender_suspects);
+	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds (host only)", "{} knocked out.", mission::knockout_suspects);
+	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad (host only)", "{} doors unlocked.", mission::unlock_doors);
+	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut (host only)", "{} doors opened.", mission::open_doors);
+	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire (host only)", "{} traps disarmed.", mission::disarm_traps);
+	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge (host only)", "{} wedges removed.", mission::remove_wedges);
+	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure (host only)", "Teleported.", [] {
 		return mission::teleport_to_next_ai() ? 1 : 0;
 	});
-	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, and reports everything", "{} actions done.", [] {
+	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, and reports everything (host only)", "{} actions done.", [] {
 		return mission::arrest_all() + mission::collect_evidence() + mission::report_all();
 	});
 

@@ -3,6 +3,7 @@
 #include "features/features.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
+#include "SDK/Engine_parameters.hpp"
 
 namespace big
 {
@@ -365,12 +366,18 @@ namespace big
 		}
 	}
 
-	// Where the grenade in your hand would fly if thrown now, up to what it first hits. Measured from thrown flashbangs,
-	// stingers and CS gas: it leaves about 64 cm in front of the camera along your aim, which the camera's sway can be a
-	// degree off, at ThrowImpulse plus UpImpulse straight up, both over its 0.16 kg, then falls at 980 cm/s² against a
-	// slight air drag. Its bounces are left out: it spins as it flies, so the same kind of hit sent it on along a wall in
-	// one throw and dropped it dead in the next. Traced piece by piece, 4 s at most, as a ball of its size: where it hits
-	// a floor its centre sits about 4 cm up, and a line misses what it only grazes.
+	// The engine fills the path into an array it allocates itself, so one set of parameters is kept and refilled in place
+	// rather than a new array left behind every frame.
+	static SDK::Params::GameplayStatics_Blueprint_PredictProjectilePath_Advanced g_predict{};
+
+	// Where the grenade in your hand would fly if thrown now, up to what it first hits, as the engine's physics predicts
+	// it. Logged from thrown flashbangs, stingers, CS gas and 9-bangers: it leaves about 64 cm in front of the camera
+	// along your aim, which the camera's sway can be a degree off, at ThrowImpulse plus UpImpulse straight up, both over
+	// the 0.16 kg every grenade's body has in flight; in the hand the body reads 0.17 to 0.63 kg, which the game does not
+	// throw with. The engine then lets it fall at the world's gravity and sweeps it as a ball of its size, 4 s at most,
+	// against what blocks the grenade's own collision channel; it leaves out the body's 0.01 linear damping, which moves
+	// the first hit up to 10 cm on the longest throws. Its bounces are left out: it spins as it flies, so the first floor
+	// bounce kept 4 to 46% of the falling speed and 26 to 63% of the speed along the floor, different every throw.
 	static void build_grenade_path(SDK::APlayerController* controller, std::vector<bone_line>& arc)
 	{
 		auto character = unreal_engine::get_character();
@@ -379,40 +386,53 @@ namespace big
 			return;
 
 		const auto grenade = static_cast<SDK::ABaseGrenade*>(item);
+		const auto mesh = grenade->ItemMesh;
+		constexpr double mass = 0.16;
+		const auto channel = mesh ? mesh->GetCollisionObjectType() : SDK::ECollisionChannel::ECC_PhysicsBody;
+
 		const auto aim = SDK::UKismetMathLibrary::GetForwardVector(controller->ControlRotation);
-		const auto start = controller->PlayerCameraManager->CameraCachePrivate.POV.Location + aim * 64.0;
-		auto velocity = aim * (grenade->ThrowImpulse / 0.16);
-		velocity.Z += grenade->UpImpulse / 0.16;
-		const auto pull = SDK::FVector(0.0, 0.0, -980.0) - velocity * 0.01;
+		static SDK::AActor* ignored[2];
+		ignored[0] = character;
+		ignored[1] = grenade;
 
-		constexpr double step = 1.0 / 30.0;
-		auto from = start;
+		auto& params = g_predict.PredictParams;
+		params.StartLocation = controller->PlayerCameraManager->CameraCachePrivate.POV.Location + aim * 64.0;
+		params.LaunchVelocity = aim * (grenade->ThrowImpulse / mass);
+		params.LaunchVelocity.Z += grenade->UpImpulse / mass;
+		params.bTraceWithCollision = true;
+		params.ProjectileRadius = 4.f;
+		params.MaxSimTime = 4.f;
+		params.bTraceWithChannel = true;
+		params.TraceChannel = channel;
+		params.ActorsToIgnore = SDK::TArray<SDK::AActor*>(ignored, 2, 2);
+		params.SimFrequency = 30.f;
+		params.OverrideGravityZ = 0.f;
+		params.DrawDebugType = SDK::EDrawDebugTrace::None;
+		params.bTraceComplex = false;
+		g_predict.WorldContextObject = character;
+
+		static auto function = SDK::UGameplayStatics::StaticClass()->GetFunction("GameplayStatics", "Blueprint_PredictProjectilePath_Advanced");
+		const auto flags = function->FunctionFlags;
+		function->FunctionFlags |= 0x400;
+		SDK::UGameplayStatics::GetDefaultObj()->ProcessEvent(function, &g_predict);
+		function->FunctionFlags = flags;
+
 		SDK::FVector2D from_screen;
-		bool from_shown = controller->ProjectWorldLocationToScreen(from, &from_screen, false);
-		for (double t = step; t <= 4.0; t += step)
+		bool from_shown = false;
+		for (const auto& point : g_predict.PredictResult.PathData)
 		{
-			auto to = start + velocity * t + pull * (0.5 * t * t);
-			SDK::FHitResult hit{};
-			const bool blocked = SDK::UKismetSystemLibrary::SphereTraceSingle(character, from, to, 4.f, SDK::ETraceTypeQuery::TraceTypeQuery1, false,
-			    {}, SDK::EDrawDebugTrace::None, &hit, true, {}, {}, 0.f);
-			if (blocked)
-				to = hit.Location;
-
 			SDK::FVector2D to_screen;
-			const bool to_shown = controller->ProjectWorldLocationToScreen(to, &to_screen, false);
+			const bool to_shown = controller->ProjectWorldLocationToScreen(point.Location, &to_screen, false);
 			if (from_shown && to_shown)
 				arc.push_back({ from_screen, to_screen });
-			if (blocked)
-			{
-				if (to_shown)
-					arc.push_back({ to_screen, to_screen });
-				return;
-			}
 
-			from = to;
 			from_screen = to_screen;
 			from_shown = to_shown;
 		}
+
+		SDK::FVector2D hit_screen;
+		if (g_predict.ReturnValue && controller->ProjectWorldLocationToScreen(g_predict.PredictResult.HitResult.Location, &hit_screen, false))
+			arc.push_back({ hit_screen, hit_screen });
 	}
 
 	static void build_frame()

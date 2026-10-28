@@ -19,11 +19,13 @@ namespace big
     static int give_magazine(SDK::APlayerCharacter* c)
     {
         auto wep = c ? c->GetEquippedWeapon() : nullptr;
-        if (!wep || wep->Capacity <= 0)
+        // Launchers such as the M320 leave Capacity at 0 and hold one round per magazine in AmmoMax.
+        const int capacity = !wep ? 0 : wep->Capacity > 0 ? wep->Capacity : static_cast<int>(wep->AmmoMax);
+        if (capacity <= 0)
             return 0;
 
         SDK::FMagazine mag{};
-        mag.Ammo = static_cast<UC::uint16>((std::min)(wep->Capacity, 0xFFFF));
+        mag.Ammo = static_cast<UC::uint16>((std::min)(capacity, 0xFFFF));
         mag.AmmoType = wep->GetCurrentMagazine().AmmoType;
         wep->Server_AddMagazine(mag);
         return mag.Ammo;

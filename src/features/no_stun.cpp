@@ -22,6 +22,36 @@ namespace big
 		}
 	}
 
+	// A stun also shakes the camera with one of the game's Camera_Stun shakes, and each grenade's bang with C_Trap_Explode,
+	// both started in native code, so they are stopped on the next tick.
+	static void stop_stun_shakes(SDK::APlayerCameraManager* camera)
+	{
+		auto shakes = camera ? camera->CachedCameraShakeMod : nullptr;
+		if (!shakes)
+			return;
+
+		static std::unordered_map<SDK::UClass*, bool> stun_shakes;
+		std::vector<SDK::UClass*> playing;
+		for (const auto& active : shakes->ActiveShakes)
+		{
+			auto shake = active.ShakeInstance ? active.ShakeInstance->Class : nullptr;
+			if (!shake)
+				continue;
+
+			auto it = stun_shakes.find(shake);
+			if (it == stun_shakes.end())
+			{
+				const auto name = shake->GetName();
+				it = stun_shakes.emplace(shake, name.starts_with("Camera_Stun_") || name == "C_Trap_Explode_C").first;
+			}
+			if (it->second)
+				playing.push_back(shake);
+		}
+		// Stopping changes the list, so the shakes are stopped once it has been read.
+		for (auto shake : playing)
+			camera->StopAllInstancesOfCameraShake(shake, true);
+	}
+
 	// The host starts every stun in native code, so it cannot be blocked there; the host ends it on the next tick
 	// instead. A client only stops its own screen effects, below, while the host's stun still slows it down, unless the
 	// host runs this mod and ends the client's stuns too.
@@ -35,6 +65,8 @@ namespace big
 			auto c = unreal_engine::get_character();
 			if (c && controller && controller->HasAuthority())
 				end_stuns(c, 0.f);
+			if (controller)
+				stop_stun_shakes(controller->PlayerCameraManager);
 		}
 	};
 

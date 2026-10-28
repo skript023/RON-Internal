@@ -3,6 +3,7 @@
 #include "commands/float_command.hpp"
 #include "commands/looped_command.hpp"
 #include "utility/ron.hpp"
+#include "host_link.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
 
@@ -181,6 +182,12 @@ namespace big
 	};
 
 	static ai_hold_fire _ai_ignore("ai_ignore", "AI Hold Fire", "Suspects target neither you nor your squad");
+
+	// The host decides who the AI may target, so for a client the flag on its pawn there is enough.
+	static host_link::client_toggle _ai_ignore_for_clients("ai_ignore"_hash, [](SDK::APlayerCharacter* c, float) {
+		if (!c->bNoTarget)
+			c->bNoTarget = true;
+	}, [](SDK::APlayerCharacter* c) { c->bNoTarget = false; });
 
 	static debug_toggle _objective_markers("objective_markers", "Objective Markers", "The game's markers on every objective",
 	    [](debug_subsystem* s) -> bool { return s->bShowObjectiveMarkers; },

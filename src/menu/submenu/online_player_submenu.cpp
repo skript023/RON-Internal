@@ -89,8 +89,8 @@ namespace big
 			sub->add_option<reguler_option>("Heal & Revive", "Full health on every limb, and back on their feet when down (host only)", [] {
 				player_event::act(player_action::heal);
 			});
-			sub->add_option<reguler_option>("Refill Ammo", "A full magazine for the gun in their hands (host only)", [] {
-				player_event::act(player_action::refill_ammo);
+			sub->add_option<reguler_option>("Add Magazine", "A full magazine of the loaded ammo for the gun in their hands (host only)", [] {
+				player_event::act(player_action::add_magazine);
 			});
 			sub->add_option<reguler_option>(player.godmode ? "Godmode: On" : "Godmode: Off", "They take no damage until the next mission (host only)", [] {
 				player_event::act(player_action::godmode);

@@ -9,6 +9,7 @@
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
 #include "utility/weak_object.hpp"
+#include "host_link.hpp"
 
 namespace big
 {
@@ -69,4 +70,10 @@ namespace big
 	};
 
 	static godmode _godmode("godmode", "Godmode", "You take no damage");
+
+	// The host decides damage, so for a client its flag on the client's pawn is enough.
+	static host_link::client_toggle _godmode_for_clients("godmode"_hash, [](SDK::APlayerCharacter* c, float) {
+		if (!c->bGodMode)
+			c->bGodMode = 1;
+	}, [](SDK::APlayerCharacter* c) { c->bGodMode = 0; });
 }

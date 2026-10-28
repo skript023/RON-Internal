@@ -12,7 +12,7 @@
 
 namespace big
 {
-	static bool_command _give_item_window("give_item_window", "Give Item", "A panel of the loadout's weapons and gear; Give puts one in your inventory (host only)", false);
+	static bool_command _give_item_window("give_item_window", "Give Item", "A panel of the loadout's weapons and gear; Give puts one in your inventory, a weapon with the attachments you set for it in the loadout screen (host only)", false);
 
 	// Icons are drawn square with the game's wide pictures centred in them, so the list shows them unstretched.
 	constexpr int icon_size = 128;
@@ -176,6 +176,56 @@ namespace big
 		g_loading = false;
 	}
 
+	// The attachments last set on this weapon in the loadout screen, which the game saves for each weapon in its profile;
+	// none for other items or a weapon never set up. Empty slots hold the game's Null attachments, which are kept.
+	static std::vector<SDK::UClass*> saved_attachments(SDK::UClass* type)
+	{
+		auto world = SDK::UWorld::GetWorld();
+		auto instance = world ? world->OwningGameInstance : nullptr;
+		if (!instance || !instance->IsA(SDK::UReadyOrNotGameInstance::StaticClass()))
+			return {};
+		auto profile = static_cast<SDK::UReadyOrNotGameInstance*>(instance)->MetaGameProfile;
+		if (!profile)
+			return {};
+
+		for (const auto& pair : profile->LoadoutAttachmentSaveMap)
+		{
+			if (static_cast<SDK::UClass*>(pair.Key()) != type)
+				continue;
+
+			const auto& stored = pair.Value();
+			std::vector<SDK::UClass*> classes;
+			for (SDK::UClass* attachment : {stored.ScopeAttachment, stored.MuzzleAttachment, stored.UnderbarrelAttachment, stored.OverbarrelAttachment,
+			         stored.StockAttachment, stored.GripAttachment, stored.IlluminatorAttachment, stored.AmmunitionAttachment})
+			{
+				if (attachment)
+					classes.push_back(attachment);
+			}
+			return classes;
+		}
+		return {};
+	}
+
+	// The item in the character's inventory, a weapon with the attachments given.
+	static SDK::ABaseItem* give_with(SDK::APlayerCharacter* c, SDK::UClass* type, const std::vector<SDK::UClass*>& attachments)
+	{
+		auto item = ron::give_item(c, type);
+		if (item && item->IsA(SDK::ABaseWeapon::StaticClass()))
+		{
+			for (auto attachment : attachments)
+				static_cast<SDK::ABaseWeapon*>(item)->AddAttachment(attachment, true);
+		}
+		return item;
+	}
+
+	// A class by its path, such as /Game/A/B.B_C, loaded if nothing has used it yet.
+	static SDK::UClass* load_class(const std::string& path)
+	{
+		const std::wstring wide(path.begin(), path.end());
+		const auto soft = SDK::UKismetSystemLibrary::Conv_SoftClassPathToSoftClassRef(SDK::UKismetSystemLibrary::MakeSoftClassPath(wide.c_str()));
+		return SDK::UKismetSystemLibrary::LoadClassAsset_Blocking(soft);
+	}
+
 	static void give(const item_entry& entry)
 	{
 		auto c = unreal_engine::get_character();
@@ -195,23 +245,45 @@ namespace big
 			return;
 		}
 
-		// Items reach other players only from the host, so a client asks the host for the same class by its name.
+		// Items reach other players only from the host, so a client asks the host for the same class by its name, followed
+		// by the paths of its attachments, which the host may not have loaded.
+		const auto attachments = saved_attachments(type);
 		if (!ron::is_host())
 		{
-			host_link::run("give_item", _give_item_window.get_label(), type->GetFullName());
+			auto args = type->GetFullName();
+			for (auto attachment : attachments)
+			{
+				const auto name = attachment->GetFullName();
+				args += '|' + name.substr(name.find(' ') + 1);
+			}
+			host_link::run("give_item", _give_item_window.get_label(), args);
 			return;
 		}
 
-		if (ron::give_item(c, type))
+		if (give_with(c, type, attachments))
 			notification::success(_give_item_window.get_label(), std::format("{} is in your inventory.", entry.name));
 		else
 			notification::warning(_give_item_window.get_label(), std::format("Your inventory did not take the {}.", entry.name));
 	}
 
-	// As the host: the item a client picked, put in that client's inventory; only an item class is spawned.
-	static host_link::client_action _give_item_for_clients("give_item", "Give Item", [](SDK::APlayerCharacter* c, const std::string& type) {
-		auto item = c ? SDK::UObject::FindClass(type) : nullptr;
-		return item && item->IsSubclassOf(SDK::ABaseItem::StaticClass()) && ron::give_item(c, item) != nullptr;
+	// As the host: the item a client picked, put in that client's inventory with its attachments; only an item class is
+	// spawned, and only attachment classes are attached.
+	static host_link::client_action _give_item_for_clients("give_item", "Give Item", [](SDK::APlayerCharacter* c, const std::string& args) {
+		const auto end = args.find('|');
+		auto item = c ? SDK::UObject::FindClass(args.substr(0, end)) : nullptr;
+		if (!item || !item->IsSubclassOf(SDK::ABaseItem::StaticClass()))
+			return false;
+
+		std::vector<SDK::UClass*> attachments;
+		for (auto at = end; at != std::string::npos;)
+		{
+			const auto next = args.find('|', at + 1);
+			auto attachment = load_class(args.substr(at + 1, next - at - 1));
+			if (attachment && attachment->IsSubclassOf(SDK::UWeaponAttachment::StaticClass()))
+				attachments.push_back(attachment);
+			at = next;
+		}
+		return give_with(c, item, attachments) != nullptr;
 	});
 
 	void view::give_item_panel()

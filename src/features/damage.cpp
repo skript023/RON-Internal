@@ -12,6 +12,7 @@
 #include "utility/ron.hpp"
 #include "task_mgr.hpp"
 #include "hit_marker.hpp"
+#include "host_link.hpp"
 
 namespace big
 {
@@ -102,14 +103,23 @@ namespace big
 			auto params = static_cast<SDK::Params::ReadyOrNotCharacter_Multicast_TakeDamage*>(parms);
 			auto player = unreal_engine::get_character();
 			auto victim = static_cast<SDK::AReadyOrNotCharacter*>(_this);
-			if (!player || params->InstigatorCharacter != player || victim == player)
+			auto instigator = params->InstigatorCharacter;
+			if (!instigator || victim == instigator)
 				return eExecutionStatus::EXECUTION_CONTINUE;
 
 			// Every player in the lobby receives this multicast, so the hit marker works for clients too.
-			hit_marker::add(victim, params->Damage);
+			const bool own = player && instigator == player;
+			if (own)
+				hit_marker::add(victim, params->Damage);
 
-			const bool lethal = _damage.get_state();
-			if ((!lethal && !_damage_multiplier.get_state()) || !ron::is_host())
+			if (!ron::is_host())
+				return eExecutionStatus::EXECUTION_CONTINUE;
+
+			// A client running this mod may have asked the host for its own Instant Kill or Damage Multiplier.
+			const auto client_scale = own ? std::optional<float>{} : host_link::client_value(instigator, "damage_multiplier"_hash);
+			const bool lethal = own ? _damage.get_state() : host_link::client_value(instigator, "damage"_hash).has_value();
+			const bool multiply = own ? _damage_multiplier.get_state() : client_scale.has_value();
+			if (!lethal && !multiply)
 				return eExecutionStatus::EXECUTION_CONTINUE;
 			if (!victim->IsA(SDK::ACyberneticCharacter::StaticClass()) || victim->IsA(SDK::ASWATCharacter::StaticClass()))
 				return eExecutionStatus::EXECUTION_CONTINUE;
@@ -127,7 +137,7 @@ namespace big
 				return eExecutionStatus::EXECUTION_CONTINUE;
 			}
 
-			const float scale = std::clamp(_damage_scale.get_state(), _damage_scale.get_minimum(), _damage_scale.get_maximum());
+			const float scale = std::clamp(own ? _damage_scale.get_state() : client_scale.value_or(1.f), _damage_scale.get_minimum(), _damage_scale.get_maximum());
 			async_run([target = weak_object<SDK::AReadyOrNotCharacter>(victim), lethal, extra = params->Damage * (scale - 1.f)] {
 				auto character = target.get();
 				if (!character || character->IsDeadNotUnconscious())
@@ -143,4 +153,8 @@ namespace big
 	};
 
 	static your_gun_hits _your_gun_hits("Function ReadyOrNot.ReadyOrNotCharacter.Multicast_TakeDamage");
+
+	// The host deals every hit, so for a client it only needs to know these are on; see your_gun_hits.
+	static host_link::client_toggle _damage_for_clients("damage"_hash, nullptr);
+	static host_link::client_toggle _damage_multiplier_for_clients("damage_multiplier"_hash, nullptr, nullptr, [] { return _damage_scale.get_state(); });
 }

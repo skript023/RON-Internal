@@ -8,6 +8,7 @@
 #include "commands/looped_command.hpp"
 #include "process_event/process_event.hpp"
 #include "utility/weak_object.hpp"
+#include "host_link.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
 
@@ -22,6 +23,16 @@ namespace big
 	static float g_crouch = 0.f;
 	// Set while this feature sends speeds, so its own call is not taken for the game's.
 	static bool g_sending = false;
+
+	// As the host: the speeds the game last asked for on each client's pawn, for Walk Speed run for that client.
+	static std::vector<std::pair<weak_object<SDK::APlayerCharacter>, std::pair<float, float>>> g_client_speeds;
+
+	static std::pair<float, float>* client_base(SDK::APlayerCharacter* c)
+	{
+		std::erase_if(g_client_speeds, [](const auto& entry) { return !entry.first.get(); });
+		auto it = std::ranges::find_if(g_client_speeds, [c](const auto& entry) { return entry.first.get() == c; });
+		return it != g_client_speeds.end() ? &it->second : nullptr;
+	}
 
 	class walk_speed : public looped_command
 	{
@@ -94,11 +105,66 @@ namespace big
 				g_walk = p->newWalkSpeed;
 				g_crouch = p->newCrouchWalkSpeed;
 			}
+			// As the host, the same call from a client's pawn.
+			else if (!g_sending && ron::is_host())
+			{
+				const auto p = static_cast<SDK::Params::PlayerCharacter_Server_SetWalkSpeed*>(parms);
+				auto c = static_cast<SDK::APlayerCharacter*>(_this);
+				if (auto base = client_base(c))
+					*base = {p->newWalkSpeed, p->newCrouchWalkSpeed};
+				else
+					g_client_speeds.emplace_back(c, std::pair{p->newWalkSpeed, p->newCrouchWalkSpeed});
+			}
 			return eExecutionStatus::EXECUTION_CONTINUE;
 		}
 	};
 
 	static game_walk_speed _game_walk_speed("Function ReadyOrNot.PlayerCharacter.Server_SetWalkSpeed");
+
+	// As the host, Walk Speed for a client: its pawn's speeds scaled the same way, set on the host's copy of the pawn.
+	// The game puts the speeds back every frame, on the host and the client at different moments, and each difference
+	// pulled the client back; so the host also takes the client's own position. The speeds are written directly, as
+	// Server_SetWalkSpeed would also send the client a call every frame.
+	static void scale_client_speeds(SDK::APlayerCharacter* c, float mult)
+	{
+		auto movement = c->CharacterMovement;
+		if (!movement)
+			return;
+
+		movement->bIgnoreClientMovementErrorChecksAndCorrection = 1;
+		movement->bServerAcceptClientAuthoritativePosition = 1;
+
+		auto base = client_base(c);
+		if (!base)
+		{
+			if (movement->MaxWalkSpeed <= 0.f)
+				return;
+			g_client_speeds.emplace_back(c, std::pair{movement->MaxWalkSpeed, movement->MaxWalkSpeedCrouched});
+			base = &g_client_speeds.back().second;
+		}
+
+		movement->MaxWalkSpeed = base->first * mult;
+		movement->MaxWalkSpeedCrouched = base->second * mult;
+	}
+
+	static void restore_client_speeds(SDK::APlayerCharacter* c)
+	{
+		auto movement = c->CharacterMovement;
+		if (movement)
+		{
+			movement->bIgnoreClientMovementErrorChecksAndCorrection = 0;
+			movement->bServerAcceptClientAuthoritativePosition = 0;
+		}
+
+		if (auto base = client_base(c); base && movement)
+		{
+			movement->MaxWalkSpeed = base->first;
+			movement->MaxWalkSpeedCrouched = base->second;
+		}
+		std::erase_if(g_client_speeds, [c](const auto& entry) { return entry.first.get() == c; });
+	}
+
+	static host_link::client_toggle _walk_speed_for_clients("walk_speed"_hash, scale_client_speeds, restore_client_speeds, [] { return _walk_mult.get_state(); });
 
 	static float_command _noclip_speed("noclip_speed", "Noclip Speed", "", 1.f, 30.f, 8.f);
 

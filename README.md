@@ -8,7 +8,7 @@
 
 ## Features
 
-Mission actions change what the host decides, so they work in single player or as the lobby host; as a client they show a notice instead.
+Mission actions change what the host decides, so they work in single player or as the lobby host; as a client they show a notice instead. Toggles marked host only turn themselves off when you join someone else's lobby as a client.
 
 | Tab | Features |
 | --- | --- |

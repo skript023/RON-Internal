@@ -2,6 +2,7 @@
 #include "script.hpp"
 #include "task_mgr.hpp"
 #include "features/mission.hpp"
+#include "features/host_link.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
 
@@ -442,6 +443,75 @@ namespace big
 		return g_shared.collectibles;
 	}
 
+	namespace
+	{
+		void act_on(target_action action, SDK::ACyberneticCharacter* character, SDK::ADoor* door)
+		{
+			switch (action)
+			{
+			case target_action::arrest: mission::arrest(character); break;
+			case target_action::surrender: mission::surrender(character); break;
+			case target_action::knockout: mission::knockout(character); break;
+			case target_action::unlock: mission::set_door_locked(door, false); break;
+			case target_action::lock: mission::set_door_locked(door, true); break;
+			case target_action::disarm_trap: mission::disarm_door_trap(door); break;
+			case target_action::remove_wedge:
+				if (door)
+					door->RemoveWedges();
+				break;
+			}
+		}
+
+		// As the host: the inspector action a client chose, on what stands nearest to where the client saw its target,
+		// within 3 m; the client sends action:x:y:z.
+		host_link::client_action _inspector_for_clients("inspector", "Target Inspector", [](SDK::APlayerCharacter*, const std::string& args) {
+			int index = -1;
+			SDK::FVector at{};
+			if (std::sscanf(args.c_str(), "%d:%lf:%lf:%lf", &index, &at.X, &at.Y, &at.Z) != 4 || index < 0
+			    || index > static_cast<int>(target_action::remove_wedge))
+				return false;
+
+			const auto action = static_cast<target_action>(index);
+			const bool on_door = action != target_action::arrest && action != target_action::surrender && action != target_action::knockout;
+			SDK::ACyberneticCharacter* character = nullptr;
+			SDK::ADoor* door = nullptr;
+			double nearest = 3.0;
+
+			if (on_door)
+			{
+				if (auto gs = ron::game_state())
+				{
+					for (auto candidate : gs->AllDoors)
+					{
+						if (!unreal_engine::is_valid_actor(candidate))
+							continue;
+						if (const double distance = at.GetDistanceToInMeters(candidate->K2_GetActorLocation()); distance < nearest)
+						{
+							nearest = distance;
+							door = candidate;
+						}
+					}
+				}
+			}
+			else
+			{
+				ron::for_each_ai([&](SDK::ACyberneticCharacter* candidate) {
+					if (const double distance = at.GetDistanceToInMeters(candidate->K2_GetActorLocation()); distance < nearest)
+					{
+						nearest = distance;
+						character = candidate;
+					}
+				});
+			}
+
+			if (!character && !door)
+				return false;
+
+			act_on(action, character, door);
+			return true;
+		});
+	}
+
 	void mission_event::inspector_action(int index)
 	{
 		target_action action;
@@ -458,22 +528,19 @@ namespace big
 		}
 
 		async_run([action, character, door] {
-			if (!ron::require_host("Target Inspector"))
-				return;
-
-			switch (action)
+			// As a client, the host does it when it runs this mod, finding the same target by where it stands.
+			if (!ron::is_host())
 			{
-			case target_action::arrest: mission::arrest(character.get()); break;
-			case target_action::surrender: mission::surrender(character.get()); break;
-			case target_action::knockout: mission::knockout(character.get()); break;
-			case target_action::unlock: mission::set_door_locked(door.get(), false); break;
-			case target_action::lock: mission::set_door_locked(door.get(), true); break;
-			case target_action::disarm_trap: mission::disarm_door_trap(door.get()); break;
-			case target_action::remove_wedge:
-				if (auto target = door.get())
-					target->RemoveWedges();
-				break;
+				auto target = character.get() ? static_cast<SDK::AActor*>(character.get()) : static_cast<SDK::AActor*>(door.get());
+				if (target)
+				{
+					const auto at = target->K2_GetActorLocation();
+					host_link::run("inspector", "Target Inspector", std::format("{}:{}:{}:{}", static_cast<int>(action), at.X, at.Y, at.Z));
+				}
+				return;
 			}
+
+			act_on(action, character.get(), door.get());
 		});
 	}
 

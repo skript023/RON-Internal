@@ -95,6 +95,27 @@ namespace big::mission
 		if (!player || !gs)
 			return 0;
 
+		// Someone cuffed or down drops their weapons as evidence only when they give up first; cuffed at once, as by Arrest
+		// All, they keep them, so their weapons are dropped as evidence here.
+		auto disarmed = collect_ai([](SDK::ACyberneticCharacter* c) {
+			return is_suspect_or_civilian(c) && (c->IsArrested() || c->IsDeadOrUnconscious() || c->IsIncapacitated());
+		});
+		for (auto character : disarmed)
+		{
+			auto inventory = character->InventoryComp;
+			if (!inventory)
+				continue;
+
+			std::vector<SDK::ABaseItem*> held;
+			for (auto item : inventory->InventoryItems)
+			{
+				if (unreal_engine::is_valid_actor(item) && item->IsA(SDK::ABaseWeapon::StaticClass()))
+					held.push_back(item);
+			}
+			for (auto item : held)
+				inventory->ThrowSpecificItem(item, true);
+		}
+
 		// PickupEvidence bags a dropped weapon, as the earlier Collect All Evidance used it; given other items and the
 		// mission's evidence it faulted inside the game before anything was collected. The mission's own evidence, such
 		// as phones or documents, is secured through its evidence state, as the earlier Auto Win did.
@@ -360,7 +381,7 @@ namespace big
 
 	static mission_action _auto_arrest("auto_arrest", "Arrest All", "Cuffs every suspect and civilian and reports them (host only)", "{} arrested.", mission::arrest_all);
 	static mission_action _report_all("report_all", "Report All", "Reports everyone arrested or down, and every reportable item, to TOC (host only)", "{} reported.", mission::report_all);
-	static mission_action _collect_evidence("collect_evidence", "Collect All Evidence", "Picks up every dropped weapon and piece of evidence (host only)", "{} collected.", mission::collect_evidence);
+	static mission_action _collect_evidence("collect_evidence", "Collect All Evidence", "Drops the weapons of everyone cuffed or down, then picks up every weapon and piece of evidence (host only)", "{} collected.", mission::collect_evidence);
 	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up (host only)", "{} surrendered.", mission::surrender_suspects);
 	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds (host only)", "{} knocked out.", mission::knockout_suspects);
 	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad (host only)", "{} doors unlocked.", mission::unlock_doors);

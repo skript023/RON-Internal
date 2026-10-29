@@ -252,6 +252,37 @@ namespace big::mission
 		return count;
 	}
 
+	// Every source of score the scoring manager tracks, such as each suspect, civilian and objective, is given all its
+	// bonuses and has its penalties taken back, so the mission ends on its best score; the number of sources.
+	static int max_score()
+	{
+		auto manager = SDK::AScoringManager::Get();
+		if (!manager)
+			return 0;
+
+		// Gathered first: giving scores changes the lists being walked. A bonus the game switched off, such as a failed
+		// objective's, counts only once it is switched on again.
+		std::vector<SDK::UScoringComponent*> sources;
+		for (auto& group : manager->ObjectiveScoreGroups)
+		{
+			for (auto& score : group.Scores)
+			{
+				for (auto& bonus : score.Bonuses)
+					bonus.bEnabled = true;
+				if (score.FromScoringComponent && std::ranges::find(sources, score.FromScoringComponent) == sources.end())
+					sources.push_back(score.FromScoringComponent);
+			}
+		}
+
+		const auto none = SDK::UKismetTextLibrary::GetEmptyText();
+		for (auto source : sources)
+		{
+			manager->GiveAllScores(source, false, false, none, 0.f, 0);
+			manager->RevokeAllPenalties(source);
+		}
+		return static_cast<int>(sources.size());
+	}
+
 	bool teleport_to_next_ai(SDK::APlayerCharacter* player)
 	{
 		if (!player)
@@ -344,8 +375,8 @@ namespace big
 	static host_link::client_action _teleport_next_ai_for_clients("teleport_next_ai", "Teleport to Next AI", [](SDK::APlayerCharacter* c, const std::string&) {
 		return mission::teleport_to_next_ai(c);
 	});
-	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, and reports everything (host only)", "{} actions done.", [] {
-		return mission::arrest_all() + mission::collect_evidence() + mission::report_all();
+	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, reports everything, and gives the full score with no penalties (host only)", "{} actions done.", [] {
+		return mission::arrest_all() + mission::collect_evidence() + mission::report_all() + mission::max_score();
 	});
 
 	static bool has_given_penalty(const SDK::FScoreData& score)

@@ -109,8 +109,34 @@ namespace big
 
 	static freeze_ai _freeze_ai("freeze_ai", "Freeze AI", "Suspects and civilians stop moving (host only)");
 
+	// Suspects pick their targets without looking at the no-target flag, so the host takes everyone flagged out of each
+	// suspect's known enemies and the targets it tracks, every tick.
+	static void forget_flagged()
+	{
+		ron::for_each_ai([](SDK::ACyberneticCharacter* ai) {
+			auto controller = ai->IsA(SDK::ASuspectCharacter::StaticClass()) && ai->Controller && ai->Controller->IsA(SDK::ACyberneticController::StaticClass())
+			    ? static_cast<SDK::ACyberneticController*>(ai->Controller) : nullptr;
+			auto targeting = controller ? controller->TargetingComponent : nullptr;
+			if (!targeting)
+				return;
+
+			auto& enemies = targeting->KnownEnemies;
+			for (int i = enemies.Num() - 1; i >= 0; --i)
+			{
+				if (enemies[i] && enemies[i]->bNoTarget)
+					enemies.Remove(i);
+			}
+
+			for (auto target : {&targeting->TrackedTarget, &targeting->LastTrackedTarget, &targeting->LastKnownEnemy})
+			{
+				if (*target && (*target)->bNoTarget)
+					*target = nullptr;
+			}
+		});
+	}
+
 	// Suspects pick no target: the player's own no-target cheat, toggled the way god mode is, and the same flag on the
-	// squad. The host decides who the AI may target, so there the flags alone are enough even if the toggle did nothing.
+	// squad, which the host then keeps out of the suspects' targets.
 	class ai_hold_fire : public looped_command
 	{
 		using looped_command::looped_command;
@@ -157,6 +183,7 @@ namespace big
 					track(m_squad, ai);
 				}
 			});
+			forget_flagged();
 		}
 
 		void on_disable() override
@@ -183,10 +210,11 @@ namespace big
 
 	static ai_hold_fire _ai_ignore("ai_ignore", "AI Hold Fire", "Suspects target neither you nor your squad");
 
-	// The host decides who the AI may target, so for a client the flag on its pawn there is enough.
+	// The host decides who the AI may target, so a client's pawn there is flagged and kept out of the suspects' targets.
 	static host_link::client_toggle _ai_ignore_for_clients("ai_ignore"_hash, [](SDK::APlayerCharacter* c, float) {
 		if (!c->bNoTarget)
 			c->bNoTarget = true;
+		forget_flagged();
 	}, [](SDK::APlayerCharacter* c) { c->bNoTarget = false; });
 
 	static debug_toggle _objective_markers("objective_markers", "Objective Markers", "The game's markers on every objective",

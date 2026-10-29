@@ -1,6 +1,7 @@
 #include "process_event/process_event.hpp"
 #include "task_mgr.hpp"
 #include "renderer.hpp"
+#include "utility/ron.hpp"
 
 #include "SDK/UMG_parameters.hpp"
 
@@ -24,6 +25,13 @@ namespace big::features
 
 			last_frame = frame;
 			last_tick = now;
+
+			if (g_running)
+			{
+				auto gs = ron::game_state();
+				if (!gs || (gs->MatchState != SDK::EMatchState::MS_Warmup && gs->MatchState != SDK::EMatchState::MS_Playing))
+					return eExecutionStatus::EXECUTION_CONTINUE;
+			}
 
 			task_mgr::tick();
 

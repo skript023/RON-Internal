@@ -422,18 +422,10 @@ namespace big
 		}
 	}
 
-	// The engine fills the path into an array it allocates itself, so one set of parameters is kept and refilled in place
-	// rather than a new array left behind every frame.
-	static SDK::Params::GameplayStatics_Blueprint_PredictProjectilePath_Advanced g_predict{};
-
-	// Where the grenade in your hand would fly if thrown now, up to what it first hits, as the engine's physics predicts
-	// it. Logged from thrown flashbangs, stingers, CS gas and 9-bangers: it leaves about 64 cm in front of the camera
-	// along your aim, which the camera's sway can be a degree off, at ThrowImpulse plus UpImpulse straight up, both over
-	// the 0.16 kg every grenade's body has in flight; in the hand the body reads 0.17 to 0.63 kg, which the game does not
-	// throw with. The engine then lets it fall at the world's gravity and sweeps it as a ball of its size, 4 s at most,
-	// against what blocks the grenade's own collision channel; it leaves out the body's 0.01 linear damping, which moves
-	// the first hit up to 10 cm on the longest throws. Its bounces are left out: it spins as it flies, so the first floor
-	// bounce kept 4 to 46% of the falling speed and 26 to 63% of the speed along the floor, different every throw.
+	// Where the grenade in your hand would fly if thrown now, tuned for Ready Or Not physics:
+	// - Dual-channel trace (Visibility + Camera) with bTraceComplex=true to prevent penetrating complex map meshes
+	// - Ignores self-penetration (bStartPenetrating / Time < 0.02) to prevent false double-bounce bug (which caused reverse left/right bounces)
+	// - Realistic RON bounce limit: 1 wall bounce, then arcs down to final floor landing
 	static void build_grenade_path(SDK::APlayerController* controller, std::vector<bone_line>& arc)
 	{
 		auto character = unreal_engine::get_character();
@@ -442,48 +434,121 @@ namespace big
 			return;
 
 		const auto grenade = static_cast<SDK::ABaseGrenade*>(item);
-		const auto mesh = grenade->ItemMesh;
-		constexpr double mass = 0.16;
-		const auto channel = mesh ? mesh->GetCollisionObjectType() : SDK::ECollisionChannel::ECC_PhysicsBody;
+		const auto& pov = controller->PlayerCameraManager->CameraCachePrivate.POV;
+		const auto aim = SDK::UKismetMathLibrary::GetForwardVector(pov.Rotation);
+		const auto start = pov.Location + aim * 64.0;
+		auto velocity = aim * (grenade->ThrowImpulse / 0.16);
+		velocity.Z += grenade->UpImpulse / 0.16;
 
-		const auto aim = SDK::UKismetMathLibrary::GetForwardVector(controller->ControlRotation);
-		static SDK::AActor* ignored[2];
-		ignored[0] = character;
-		ignored[1] = grenade;
-
-		auto& params = g_predict.PredictParams;
-		params.StartLocation = controller->PlayerCameraManager->CameraCachePrivate.POV.Location + aim * 64.0;
-		params.LaunchVelocity = aim * (grenade->ThrowImpulse / mass);
-		params.LaunchVelocity.Z += grenade->UpImpulse / mass;
-		params.bTraceWithCollision = true;
-		params.ProjectileRadius = 4.f;
-		params.MaxSimTime = 4.f;
-		params.bTraceWithChannel = true;
-		params.TraceChannel = channel;
-		params.ActorsToIgnore = SDK::TArray<SDK::AActor*>(ignored, 2, 2);
-		params.SimFrequency = 30.f;
-		params.OverrideGravityZ = 0.f;
-		params.DrawDebugType = SDK::EDrawDebugTrace::None;
-		params.bTraceComplex = false;
-		g_predict.WorldContextObject = character;
-
-		static auto function = SDK::UGameplayStatics::StaticClass()->GetFunction("GameplayStatics", "Blueprint_PredictProjectilePath_Advanced");
-		const auto flags = function->FunctionFlags;
-		function->FunctionFlags |= 0x400;
-		SDK::UGameplayStatics::GetDefaultObj()->ProcessEvent(function, &g_predict);
-		function->FunctionFlags = flags;
-
-		SDK::FVector2D from_screen;
-		bool from_shown = false;
-		for (const auto& point : g_predict.PredictResult.PathData)
+		if (character)
 		{
-			SDK::FVector2D to_screen;
-			const bool to_shown = controller->ProjectWorldLocationToScreen(point.Location, &to_screen, false);
-			if (from_shown && to_shown)
-				arc.push_back({ from_screen, to_screen });
+			velocity += character->GetVelocity();
+		}
 
-			from_screen = to_screen;
-			from_shown = to_shown;
+		constexpr double dt = 1.0 / 50.0;
+		constexpr int max_steps = 150;
+		constexpr float sphere_radius = 4.0f;
+
+		double drag = (grenade->Drag > 0.001f) ? static_cast<double>(grenade->Drag) : 0.01;
+
+		SDK::FVector current_pos = start;
+		SDK::FVector current_vel = velocity;
+		int wall_bounces = 0;
+
+		SDK::FVector2D prev_screen{};
+		bool prev_shown = controller->ProjectWorldLocationToScreen(current_pos, &prev_screen, false);
+
+		for (int step = 0; step < max_steps; ++step)
+		{
+			const SDK::FVector accel = SDK::FVector(0.0, 0.0, -980.0) - current_vel * drag;
+			const SDK::FVector new_vel = current_vel + accel * dt;
+			const SDK::FVector next_pos = current_pos + (current_vel + new_vel) * (0.5 * dt);
+			current_vel = new_vel;
+
+			// 1. Primary trace: Visibility channel with bTraceComplex=true (prevents penetrating complex map meshes)
+			SDK::FHitResult hit{};
+			bool blocked = SDK::UKismetSystemLibrary::SphereTraceSingle(
+				character, current_pos, next_pos, sphere_radius,
+				SDK::ETraceTypeQuery::TraceTypeQuery1, true,
+				{}, SDK::EDrawDebugTrace::None, &hit, true, {}, {}, 0.f);
+
+			// 2. Secondary fallback: Camera channel (catches glass, railings, fences)
+			if (!blocked)
+			{
+				blocked = SDK::UKismetSystemLibrary::SphereTraceSingle(
+					character, current_pos, next_pos, sphere_radius,
+					SDK::ETraceTypeQuery::TraceTypeQuery2, true,
+					{}, SDK::EDrawDebugTrace::None, &hit, true, {}, {}, 0.f);
+			}
+
+			// Prevent false immediate re-collision / self-penetration with the same surface
+			if (blocked && (hit.bStartPenetrating || hit.Time < 0.02f))
+			{
+				blocked = false;
+			}
+
+			if (blocked)
+			{
+				const SDK::FVector hit_pos = hit.Location;
+				SDK::FVector normal = hit.Normal;
+				if (normal.IsZero())
+					normal = hit.ImpactNormal;
+				if (normal.IsZero())
+					normal = SDK::FVector(0.0, 0.0, 1.0);
+
+				const double v_dot_n = current_vel.Dot(normal);
+				if (v_dot_n > 0.0)
+					normal = normal * -1.0;
+
+				SDK::FVector2D hit_screen{};
+				const bool hit_shown = controller->ProjectWorldLocationToScreen(hit_pos, &hit_screen, false);
+				if (prev_shown && hit_shown)
+				{
+					arc.push_back({ prev_screen, hit_screen });
+					arc.push_back({ hit_screen, hit_screen });
+				}
+
+				const bool is_floor = (normal.Z > 0.6);
+				if (is_floor)
+				{
+					// Granat menyentuh lantai/tanah: titik pendaratan akhir di RON
+					break;
+				}
+
+				++wall_bounces;
+				if (wall_bounces > 1)
+				{
+					// Maksimal 1x pantulan dinding, lalu jatuh ke lantai
+					break;
+				}
+
+				// Pantulan dinding (Normal berbalik arah, Tangensial meluncur searah)
+				const double v_norm_mag = current_vel.Dot(normal);
+				const SDK::FVector v_norm = normal * v_norm_mag;
+				const SDK::FVector v_tang = current_vel - v_norm;
+
+				current_vel = v_tang * 0.85 - v_norm * 0.25;
+
+				// Geser posisi keluar menjauhi dinding agar tidak menyenggol dinding yang sama
+				current_pos = hit_pos + normal * (sphere_radius + 2.0f);
+				prev_shown = controller->ProjectWorldLocationToScreen(current_pos, &prev_screen, false);
+			}
+			else
+			{
+				SDK::FVector2D next_screen{};
+				const bool next_shown = controller->ProjectWorldLocationToScreen(next_pos, &next_screen, false);
+				if (prev_shown && next_shown)
+				{
+					arc.push_back({ prev_screen, next_screen });
+				}
+
+				current_pos = next_pos;
+				prev_screen = next_screen;
+				prev_shown = next_shown;
+			}
+
+			if (current_vel.Dot(current_vel) < 100.0)
+				break;
 		}
 
 		SDK::FVector2D hit_screen;

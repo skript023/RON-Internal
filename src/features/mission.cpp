@@ -61,6 +61,14 @@ namespace big::mission
 		return static_cast<int>(targets.size());
 	}
 
+	// Whether anyone Arrest All cuffs does not count as cuffed yet.
+	static bool cuffing()
+	{
+		return !collect_ai([](SDK::ACyberneticCharacter* c) {
+			return is_suspect_or_civilian(c) && !c->IsArrested() && !c->IsDeadNotUnconscious();
+		}).empty();
+	}
+
 	int report_all()
 	{
 		auto player = unreal_engine::get_character();
@@ -396,9 +404,37 @@ namespace big
 	static host_link::client_action _teleport_next_ai_for_clients("teleport_next_ai", "Teleport to Next AI", [](SDK::APlayerCharacter* c, const std::string&) {
 		return mission::teleport_to_next_ai(c);
 	});
-	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, reports everything, and gives the full score with no penalties (host only)", "{} actions done.", [] {
-		return mission::arrest_all() + mission::collect_evidence() + mission::report_all() + mission::max_score();
-	});
+
+	// Arrest All's cuffs did not always count at once, and until they do Collect All Evidence and Report All pass everyone
+	// by, so Auto Win waits for them, up to three seconds, before the rest.
+	class auto_win : public command
+	{
+		using command::command;
+
+		void on_call() override
+		{
+			if (!ron::is_host())
+			{
+				host_link::run(get_name(), get_label());
+				return;
+			}
+
+			async_run([this]() -> task<void> {
+				int count = mission::arrest_all();
+				const auto started = std::chrono::steady_clock::now();
+				while (std::chrono::steady_clock::now() - started < 3s && mission::cuffing())
+					co_await this_task::wait();
+
+				count += mission::collect_evidence() + mission::report_all() + mission::max_score();
+				if (count > 0)
+					notification::success(get_label(), std::format("{} actions done.", count));
+				else
+					notification::info(get_label(), "Nothing left to do.");
+			});
+		}
+	};
+
+	static auto_win _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, reports everything, and gives the full score with no penalties (host only)", 0);
 
 	static bool has_given_penalty(const SDK::FScoreData& score)
 	{

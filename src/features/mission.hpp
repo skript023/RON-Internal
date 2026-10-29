@@ -4,6 +4,7 @@ namespace SDK
 {
 	class ACyberneticCharacter;
 	class ADoor;
+	class APlayerCharacter;
 }
 
 // Mission actions shared by the Mission tab, Auto Win, and the target inspector. Call them from the game thread;
@@ -19,7 +20,7 @@ namespace big::mission
 	int open_doors();
 	int disarm_traps();
 	int remove_wedges();
-	bool teleport_to_next_ai();
+	bool teleport_to_next_ai(SDK::APlayerCharacter* player);
 
 	void arrest(SDK::ACyberneticCharacter* character);
 	void surrender(SDK::ACyberneticCharacter* character);

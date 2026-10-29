@@ -1,4 +1,5 @@
 #include "mission.hpp"
+#include "host_link.hpp"
 #include "script.hpp"
 #include "commands/command.hpp"
 #include "commands/looped_command.hpp"
@@ -60,6 +61,14 @@ namespace big::mission
 		return static_cast<int>(targets.size());
 	}
 
+	// Whether anyone Arrest All cuffs does not count as cuffed yet.
+	static bool cuffing()
+	{
+		return !collect_ai([](SDK::ACyberneticCharacter* c) {
+			return is_suspect_or_civilian(c) && !c->IsArrested() && !c->IsDeadNotUnconscious();
+		}).empty();
+	}
+
 	int report_all()
 	{
 		auto player = unreal_engine::get_character();
@@ -93,6 +102,27 @@ namespace big::mission
 		auto gs = ron::game_state();
 		if (!player || !gs)
 			return 0;
+
+		// Someone cuffed or down drops their weapons as evidence only when they give up first; cuffed at once, as by Arrest
+		// All, they keep them, so their weapons are dropped as evidence here.
+		auto disarmed = collect_ai([](SDK::ACyberneticCharacter* c) {
+			return is_suspect_or_civilian(c) && (c->IsArrested() || c->IsDeadOrUnconscious() || c->IsIncapacitated());
+		});
+		for (auto character : disarmed)
+		{
+			auto inventory = character->InventoryComp;
+			if (!inventory)
+				continue;
+
+			std::vector<SDK::ABaseItem*> held;
+			for (auto item : inventory->InventoryItems)
+			{
+				if (unreal_engine::is_valid_actor(item) && item->IsA(SDK::ABaseWeapon::StaticClass()))
+					held.push_back(item);
+			}
+			for (auto item : held)
+				inventory->ThrowSpecificItem(item, true);
+		}
 
 		// PickupEvidence bags a dropped weapon, as the earlier Collect All Evidance used it; given other items and the
 		// mission's evidence it faulted inside the game before anything was collected. The mission's own evidence, such
@@ -251,13 +281,43 @@ namespace big::mission
 		return count;
 	}
 
-	bool teleport_to_next_ai()
+	// Every source of score the scoring manager tracks, such as each suspect, civilian and objective, is given all its
+	// bonuses and has its penalties taken back, so the mission ends on its best score; the number of sources.
+	static int max_score()
 	{
-		auto player = unreal_engine::get_character();
+		auto manager = SDK::AScoringManager::Get();
+		if (!manager)
+			return 0;
+
+		// Gathered first: giving scores changes the lists being walked. A bonus the game switched off, such as a failed
+		// objective's, counts only once it is switched on again.
+		std::vector<SDK::UScoringComponent*> sources;
+		for (auto& group : manager->ObjectiveScoreGroups)
+		{
+			for (auto& score : group.Scores)
+			{
+				for (auto& bonus : score.Bonuses)
+					bonus.bEnabled = true;
+				if (score.FromScoringComponent && std::ranges::find(sources, score.FromScoringComponent) == sources.end())
+					sources.push_back(score.FromScoringComponent);
+			}
+		}
+
+		const auto none = SDK::UKismetTextLibrary::GetEmptyText();
+		for (auto source : sources)
+		{
+			manager->GiveAllScores(source, false, false, none, 0.f, 0);
+			manager->RevokeAllPenalties(source);
+		}
+		return static_cast<int>(sources.size());
+	}
+
+	bool teleport_to_next_ai(SDK::APlayerCharacter* player)
+	{
 		if (!player)
 			return false;
 
-		const auto origin = player::get_player_coords();
+		const auto origin = player->K2_GetActorLocation();
 		SDK::ACyberneticCharacter* nearest = nullptr;
 		float nearest_distance = std::numeric_limits<float>::max();
 
@@ -285,7 +345,8 @@ namespace big::mission
 
 		auto location = nearest->K2_GetActorLocation();
 		location.Z += 100.f;
-		player::set_player_coords(location, player::get_player_rotation());
+		const auto rotation = player->K2_GetActorRotation();
+		player->Server_TeleportPlayerToLocation(location, SDK::FVector(rotation.Pitch, rotation.Yaw, rotation.Roll));
 		return true;
 	}
 }
@@ -308,8 +369,11 @@ namespace big
 	protected:
 		void on_call() override
 		{
-			if (!ron::require_host(get_label()))
+			if (!ron::is_host())
+			{
+				host_link::run(get_name(), get_label());
 				return;
+			}
 
 			const int count = m_action();
 			if (count > 0)
@@ -323,21 +387,54 @@ namespace big
 		action_t m_action;
 	};
 
-	static mission_action _auto_arrest("auto_arrest", "Arrest All", "Cuffs every suspect and civilian and reports them", "{} arrested.", mission::arrest_all);
-	static mission_action _report_all("report_all", "Report All", "Reports everyone arrested or down, and every reportable item, to TOC", "{} reported.", mission::report_all);
-	static mission_action _collect_evidence("collect_evidence", "Collect All Evidence", "Picks up every dropped weapon and piece of evidence", "{} collected.", mission::collect_evidence);
-	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up", "{} surrendered.", mission::surrender_suspects);
-	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds", "{} knocked out.", mission::knockout_suspects);
-	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad", "{} doors unlocked.", mission::unlock_doors);
-	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut", "{} doors opened.", mission::open_doors);
-	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire", "{} traps disarmed.", mission::disarm_traps);
-	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge", "{} wedges removed.", mission::remove_wedges);
-	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure", "Teleported.", [] {
-		return mission::teleport_to_next_ai() ? 1 : 0;
+	static mission_action _auto_arrest("auto_arrest", "Arrest All", "Cuffs every suspect and civilian and reports them (host only)", "{} arrested.", mission::arrest_all);
+	static mission_action _report_all("report_all", "Report All", "Reports everyone arrested or down, and every reportable item, to TOC (host only)", "{} reported.", mission::report_all);
+	static mission_action _collect_evidence("collect_evidence", "Collect All Evidence", "Drops the weapons of everyone cuffed or down, then picks up every weapon and piece of evidence (host only)", "{} collected.", mission::collect_evidence);
+	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up (host only)", "{} surrendered.", mission::surrender_suspects);
+	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds (host only)", "{} knocked out.", mission::knockout_suspects);
+	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad (host only)", "{} doors unlocked.", mission::unlock_doors);
+	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut (host only)", "{} doors opened.", mission::open_doors);
+	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire (host only)", "{} traps disarmed.", mission::disarm_traps);
+	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge (host only)", "{} wedges removed.", mission::remove_wedges);
+	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure (host only)", "Teleported.", [] {
+		return mission::teleport_to_next_ai(unreal_engine::get_character()) ? 1 : 0;
 	});
-	static mission_action _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, and reports everything", "{} actions done.", [] {
-		return mission::arrest_all() + mission::collect_evidence() + mission::report_all();
+
+	// As the host: moves the client that asked, not the host.
+	static host_link::client_action _teleport_next_ai_for_clients("teleport_next_ai", "Teleport to Next AI", [](SDK::APlayerCharacter* c, const std::string&) {
+		return mission::teleport_to_next_ai(c);
 	});
+
+	// Arrest All's cuffs did not always count at once, and until they do Collect All Evidence and Report All pass everyone
+	// by, so Auto Win waits for them, up to three seconds, before the rest.
+	class auto_win : public command
+	{
+		using command::command;
+
+		void on_call() override
+		{
+			if (!ron::is_host())
+			{
+				host_link::run(get_name(), get_label());
+				return;
+			}
+
+			async_run([this]() -> task<void> {
+				int count = mission::arrest_all();
+				const auto started = std::chrono::steady_clock::now();
+				while (std::chrono::steady_clock::now() - started < 3s && mission::cuffing())
+					co_await this_task::wait();
+
+				count += mission::collect_evidence() + mission::report_all() + mission::max_score();
+				if (count > 0)
+					notification::success(get_label(), std::format("{} actions done.", count));
+				else
+					notification::info(get_label(), "Nothing left to do.");
+			});
+		}
+	};
+
+	static auto_win _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, reports everything, and gives the full score with no penalties (host only)", 0);
 
 	static bool has_given_penalty(const SDK::FScoreData& score)
 	{

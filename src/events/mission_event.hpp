@@ -13,7 +13,7 @@ namespace big
 	};
 
 	inline bool_command _mission_overlay("mission_overlay", "Mission Tracker", "Suspects, civilians, evidence, objectives, and score at a glance", false);
-	inline bool_command _target_inspector("target_inspector", "Target Inspector", "A card for the person or door under your crosshair", false);
+	inline bool_command _target_inspector("target_inspector", "Target Inspector", "A card for the person or door under your crosshair; its actions need the host", false);
 	inline bool_command _collectibles_window("collectibles_window", "Collectibles", "Every lore collectible on the map, with teleport", false);
 	inline bool_command _objective_alerts("objective_alerts", "Objective Alerts", "A notification when an objective completes or fails", true);
 

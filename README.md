@@ -8,15 +8,15 @@
 
 ## Features
 
-Mission actions change what the host decides, so they work in single player or as the lobby host; as a client they show a notice instead.
+Mission actions change what the host decides, so they work in single player or as the lobby host; as a client they show a notice instead. Toggles marked host only turn themselves off when you join someone else's lobby as a client, unless that host runs this trainer too: with Accept Client Requests on in the host's Online Players, a client that uses Check Host Mod there has the host run them for it.
 
 | Tab | Features |
 | --- | --- |
-| Self | Godmode, No Stun, No Suppression, No Hit Effects, Bright Vision, Infinite Ammo, Add Magazine, Infinite Tactical Items (grenades, wedges, C2, chemlights, pepper spray), Give Item panel of the loadout's weapons and gear by kind with their pictures, Instant Kill, No Recoil, No Spread, Rapid Fire, Full Auto, Wall Penetration, Instant Lockpick, Instant Cuff, Walk Speed, Noclip |
-| Mission | Mission Tracker overlay, Target Inspector, Collectibles panel, Objective Alerts, No Penalty; Auto Win, Arrest All, Surrender or Knock Out Suspects, Report All, Collect All Evidence, Unlock All Doors, Open All Doors, Disarm All Traps, Remove Door Wedges, Teleport to Next AI |
+| Self | Godmode, No Stun, No Suppression, No Hit Effects, Bright Vision, Infinite Ammo, Add Magazine, Infinite Tactical Items (grenades, wedges, C2, chemlights, pepper spray), Give Item panel of the loadout's weapons and gear by kind with their pictures, weapons coming with the attachments you set for them in the loadout screen, Instant Kill, No Recoil, No Spread, Rapid Fire, Full Auto, Wall Penetration, Instant Lockpick, Instant Cuff, Walk Speed, Noclip, Third Person over your right shoulder, closer while you aim down sights |
+| Mission | Mission Tracker overlay, Target Inspector, Collectibles panel, Objective Alerts, No Penalty; Auto Win with the full score, Arrest All, Surrender or Knock Out Suspects, Report All, Collect All Evidence, Unlock All Doors, Open All Doors, Disarm All Traps, Remove Door Wedges, Teleport to Next AI |
 | World | Slow Motion, Damage Multiplier, Freeze AI, AI Hold Fire, Objective and Evidence Markers, Infinite Squad Items, Reset Squad Stress |
-| Online Players (in Self) | Player Alerts for joins, leaves, and downed teammates; a page per player with health per limb, status, held item and ammo, distance, ping, and platform; Teleport to Player, Spectate, Mute; as host also Heal & Revive, Refill Ammo, Godmode, and Kick |
-| ESP | Suspects, civilians, SWAT, other players, traps, locked and wedged doors, evidence, reportables, and collectibles, with name, line, health bar, box, corner box, 3D box, and skeleton (AI only), up to a maximum distance; a Radar panel of the same things around you; Grenade Path, the arc a grenade in your hand would fly up to what it first hits; Hit Marker, a mark on your crosshair with the damage of each hit, red when it takes them down |
+| Online Players (in Self) | Player Alerts for joins, leaves, and downed teammates; a page per player with health per limb, status, held item and ammo, distance, ping, and platform; Teleport to Player, Spectate, Mute; as host also Heal & Revive, Add Magazine, Godmode, and Kick |
+| ESP | Suspects, civilians, SWAT, other players, traps, locked and wedged doors, evidence, reportables, and collectibles, with name, line, health bar, box, corner box, 3D box, and skeleton (AI only), up to a maximum distance; a Radar panel of the same things around you; Grenade Path, the arc a grenade in your hand would fly up to what it first hits; Hit Marker, a mark on your crosshair with the damage of each hit, red when it takes them down; Crosshair, on what your gun's barrel points at, so it stays true in Third Person |
 | Aimbot | Aimbot, silent aim, triggerbot, FOV circle |
 | Teleport | Teleport forward and saved locations by category |
 | Settings | Astra's shared settings (layout, theme, banner, transparency, menu keys) plus Debug, Reload, Unload, Exit |

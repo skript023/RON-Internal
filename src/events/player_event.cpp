@@ -3,6 +3,7 @@
 #include "task_mgr.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
+#include "features/host_link.hpp"
 
 #include <astra/host/notification.hpp>
 
@@ -338,21 +339,12 @@ namespace big
 			notification::success("Heal & Revive", std::format("{} is back to full health.", name));
 		}
 
-		void refill_ammo(SDK::APlayerCharacter* target, const std::string& name)
+		void add_magazine(SDK::APlayerCharacter* target, const std::string& name)
 		{
-			auto weapon = target->GetEquippedWeapon();
-			if (!weapon || weapon->Capacity <= 0)
-			{
-				notification::warning("Refill Ammo", std::format("{} is not holding a gun that takes magazines.", name));
-				return;
-			}
-
-			SDK::FMagazine magazine{};
-			magazine.Ammo = static_cast<UC::uint16>((std::min)(weapon->Capacity, 0xFFFF));
-			magazine.AmmoType = weapon->GetCurrentMagazine().AmmoType;
-			weapon->Server_AddMagazine(magazine);
-
-			notification::success("Refill Ammo", std::format("Gave {} a magazine of {} rounds.", name, magazine.Ammo));
+			if (const int rounds = ron::give_magazine(target))
+				notification::success("Add Magazine", std::format("Gave {} a magazine of {} rounds.", name, rounds));
+			else
+				notification::warning("Add Magazine", std::format("{} is not holding a gun that takes magazines.", name));
 		}
 
 		void mute(const std::string& name)
@@ -434,6 +426,13 @@ namespace big
 				return;
 			}
 
+			// As a client, the host does these when it runs this mod; it finds the player by name.
+			if (!ron::is_host() && (action == player_action::heal || action == player_action::add_magazine || action == player_action::godmode))
+			{
+				host_link::run("player_action", "Online Players", std::format("{}:{}", static_cast<int>(action), name));
+				return;
+			}
+
 			switch (action)
 			{
 			case player_action::teleport:
@@ -454,9 +453,9 @@ namespace big
 				if (ron::require_host("Heal & Revive"))
 					heal(target, name);
 				break;
-			case player_action::refill_ammo:
-				if (ron::require_host("Refill Ammo"))
-					refill_ammo(target, name);
+			case player_action::add_magazine:
+				if (ron::require_host("Add Magazine"))
+					add_magazine(target, name);
 				break;
 			case player_action::godmode:
 				// The host decides damage, so its flag alone protects them.
@@ -470,6 +469,29 @@ namespace big
 				break;
 			}
 		}
+
+		// As the host: Heal & Revive, Add Magazine or Godmode a client asked for, on the player it named.
+		host_link::client_action _player_action_for_clients("player_action", "Online Players", [](SDK::APlayerCharacter*, const std::string& args) {
+			const auto colon = args.find(':');
+			auto gs = ron::game_state();
+			if (colon == std::string::npos || !gs)
+				return false;
+
+			const auto action = static_cast<player_action>(std::atoi(args.substr(0, colon).c_str()));
+			if (action != player_action::heal && action != player_action::add_magazine && action != player_action::godmode)
+				return false;
+
+			const auto name = args.substr(colon + 1);
+			for (auto state : gs->PlayerArray)
+			{
+				if (unreal_engine::is_valid_actor(state) && state->PlayerNamePrivate.ToString() == name)
+				{
+					run_action(action, state);
+					return true;
+				}
+			}
+			return false;
+		});
 	}
 
 	task<void> player_event::run()

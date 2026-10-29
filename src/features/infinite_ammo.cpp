@@ -9,6 +9,7 @@
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
 #include "utility/weak_object.hpp"
+#include "host_link.hpp"
 
 namespace big
 {
@@ -49,4 +50,25 @@ namespace big
 	};
 
 	static infinite_ammo _infinite_ammo("infinite_ammo", "Infinite Ammo", "Magazines never run dry");
+
+	// As the host, the weapons switched on for clients, whose ammo the host counts.
+	static std::vector<weak_object<SDK::ABaseMagazineWeapon>> g_client_weapons;
+
+	static host_link::client_toggle _infinite_ammo_for_clients("infinite_ammo"_hash, [](SDK::APlayerCharacter* c, float) {
+		if (auto wep = c->GetEquippedWeapon(); wep && !wep->bInfiniteAmmo)
+		{
+			wep->bInfiniteAmmo = 1;
+			g_client_weapons.emplace_back(wep);
+		}
+	}, [](SDK::APlayerCharacter* c) {
+		std::erase_if(g_client_weapons, [c](const weak_object<SDK::ABaseMagazineWeapon>& weapon) {
+			auto wep = weapon.get();
+			if (!wep)
+				return true;
+			if (wep->Owner != c)
+				return false;
+			wep->bInfiniteAmmo = 0;
+			return true;
+		});
+	});
 }

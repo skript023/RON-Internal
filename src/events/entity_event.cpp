@@ -3,6 +3,7 @@
 #include "features/features.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
+#include "SDK/Engine_parameters.hpp"
 
 namespace big
 {
@@ -259,43 +260,99 @@ namespace big
 		}
 	}
 
-	static bool is_skeleton_variant_2(SDK::USkeletalMeshComponent* mesh)
+	// The skeleton's joints by bone name, which the AI's meshes share while each orders its bones differently.
+	enum joint : int
 	{
-		if (!mesh) return false;
+		head_end, head, neck, spine_3, spine_2, spine_1, pelvis,
+		clavicle_l, upperarm_l, lowerarm_l, hand_l, clavicle_r, upperarm_r, lowerarm_r, hand_r,
+		thigh_l, calf_l, foot_l, thigh_r, calf_r, foot_r, joint_count
+	};
 
-		auto name = mesh->GetBoneName(45).ToString();
-		return name == "Head";
+	static constexpr std::pair<joint, joint> skeleton_lines[] = {
+	    {head, neck}, {neck, spine_3}, {spine_3, spine_2}, {spine_2, spine_1}, {spine_1, pelvis},
+	    {spine_3, clavicle_l}, {clavicle_l, upperarm_l}, {upperarm_l, lowerarm_l}, {lowerarm_l, hand_l},
+	    {spine_3, clavicle_r}, {clavicle_r, upperarm_r}, {upperarm_r, lowerarm_r}, {lowerarm_r, hand_r},
+	    {pelvis, thigh_l}, {thigh_l, calf_l}, {calf_l, foot_l},
+	    {pelvis, thigh_r}, {thigh_r, calf_r}, {calf_r, foot_r},
+	};
+
+	static const std::array<SDK::FName, joint_count>& joint_names()
+	{
+		static const auto names = [] {
+			constexpr const wchar_t* text[joint_count] = {L"head_end", L"Head", L"neck_1", L"spine_3", L"spine_2", L"spine_1", L"pelvis",
+			    L"clavicle_LE", L"upperarm_LE", L"lowerarm_LE", L"hand_LE", L"clavicle_RI", L"upperarm_RI", L"lowerarm_RI", L"hand_RI",
+			    L"thigh_LE", L"calf_LE", L"foot_LE", L"thigh_RI", L"calf_RI", L"foot_RI"};
+			std::array<SDK::FName, joint_count> out;
+			for (int i = 0; i < joint_count; i++)
+				out[i] = SDK::UKismetStringLibrary::Conv_StringToName(text[i]);
+			return out;
+		}();
+		return names;
 	}
 
-	static bool build_skeleton(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, std::vector<bone_line>& out)
+	// Which joints the mesh has, a bit each, asked once per mesh asset. The asset's object index is kept too, since a
+	// freed asset's address can be reused.
+	static std::uint32_t joints_of(SDK::USkeletalMeshComponent* mesh)
 	{
-		if (!actor || !controller) return false;
+		auto asset = mesh->SkeletalMeshAsset;
+		if (!asset)
+			return 0;
 
-		auto mesh = actor->Mesh;
-		if (!mesh) return false;
-
-		bool variant2 = is_skeleton_variant_2(mesh);
-
-		const auto& skeleton =
-			actor->DefaultTeam == SDK::ETeamType::TT_SUSPECT
-			? (variant2 ? suspect_skel_2 : suspect_skel_1)
-			: (variant2 ? civ_skel_2 : civ_skel_1);
-
-		for (auto [a, b] : skeleton)
+		struct cached
 		{
-			SDK::FVector wa, wb;
-			if (!unreal_engine::get_bone_world(actor, a, wa)) continue;
-			if (!unreal_engine::get_bone_world(actor, b, wb)) continue;
+			std::int32_t index;
+			std::uint32_t joints;
+		};
+		static std::unordered_map<SDK::UObject*, cached> meshes;
+		auto it = meshes.find(asset);
+		if (it == meshes.end() || it->second.index != asset->Index)
+		{
+			std::uint32_t joints = 0;
+			for (int i = 0; i < joint_count; i++)
+			{
+				if (mesh->GetBoneIndex(joint_names()[i]) != -1)
+					joints |= 1u << i;
+			}
+			it = meshes.insert_or_assign(asset, cached{asset->Index, joints}).first;
+		}
+		return it->second.joints;
+	}
 
-			SDK::FVector2D sa, sb;
+	static bool build_skeleton(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, esp_data& data)
+	{
+		auto mesh = actor->Mesh;
+		const auto joints = mesh ? joints_of(mesh) : 0;
+		if (!joints)
+			return false;
 
-			if (!controller->ProjectWorldLocationToScreen(wa, &sa, true)) continue;
-			if (!controller->ProjectWorldLocationToScreen(wb, &sb, true)) continue;
+		// Each joint is placed once and shared by its lines.
+		std::array<std::optional<SDK::FVector2D>, joint_count> screen;
+		for (int i = 0; i < joint_count; i++)
+		{
+			if (!(joints & (1u << i)))
+				continue;
 
-			out.push_back({ sa, sb });
+			SDK::FVector2D at;
+			const auto world = mesh->GetBoneTransform(joint_names()[i], SDK::ERelativeTransformSpace::RTS_World).Translation;
+			if (controller->ProjectWorldLocationToScreen(world, &at, true))
+				screen[i] = at;
 		}
 
-		return !out.empty();
+		for (auto [a, b] : skeleton_lines)
+		{
+			if (screen[a] && screen[b])
+				data.skeleton.push_back({*screen[a], *screen[b]});
+		}
+
+		// The head is a circle from the Head bone, at the base of the skull, to the top of it.
+		if (screen[head] && screen[head_end])
+		{
+			const auto& base = *screen[head];
+			const auto& top = *screen[head_end];
+			data.head = {(base.X + top.X) / 2, (base.Y + top.Y) / 2};
+			data.head_radius = (std::max)(static_cast<float>(std::hypot(top.X - base.X, top.Y - base.Y)) / 2.f, 2.f);
+		}
+		return !data.skeleton.empty();
 	}
 
 	static bool build_box(SDK::AReadyOrNotCharacter* actor, SDK::APlayerController* controller, float& x, float& y, float& w, float& h)
@@ -493,6 +550,10 @@ namespace big
 			if (current_vel.Dot(current_vel) < 100.0)
 				break;
 		}
+
+		SDK::FVector2D hit_screen;
+		if (g_predict.ReturnValue && controller->ProjectWorldLocationToScreen(g_predict.PredictResult.HitResult.Location, &hit_screen, false))
+			arc.push_back({ hit_screen, hit_screen });
 	}
 
 	static void build_frame()
@@ -603,7 +664,7 @@ namespace big
 
 			// The bone pairs are for the AI's meshes only.
 			if (_draw_skeleton.get_state() && kind != esp_kind::player)
-				data.has_skeleton = build_skeleton(character, controller, data.skeleton);
+				data.has_skeleton = build_skeleton(character, controller, data);
 			if (want_box)
 				data.has_box = build_box(character, controller, data.box_x, data.box_y, data.box_w, data.box_h);
 			if (_draw_box_3d.get_state())

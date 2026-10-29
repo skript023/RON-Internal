@@ -98,6 +98,23 @@ namespace big::ron
 		return item;
 	}
 
+	// One more full magazine of the ammo the gun in the character's hands has loaded, sized to the gun's own capacity;
+	// the rounds, or 0 without a gun that takes magazines. Only the host hands out ammo.
+	inline int give_magazine(SDK::APlayerCharacter* character)
+	{
+		auto weapon = character ? character->GetEquippedWeapon() : nullptr;
+		// Launchers such as the M320 leave Capacity at 0 and hold one round per magazine in AmmoMax.
+		const int capacity = !weapon ? 0 : weapon->Capacity > 0 ? weapon->Capacity : static_cast<int>(weapon->AmmoMax);
+		if (capacity <= 0)
+			return 0;
+
+		SDK::FMagazine magazine{};
+		magazine.Ammo = static_cast<UC::uint16>((std::min)(capacity, 0xFFFF));
+		magazine.AmmoType = weapon->GetCurrentMagazine().AmmoType;
+		weapon->Server_AddMagazine(magazine);
+		return magazine.Ammo;
+	}
+
 	inline const char* health_status_name(SDK::EPlayerHealthStatus status)
 	{
 		using enum SDK::EPlayerHealthStatus;
@@ -159,6 +176,24 @@ namespace big::ron
 				continue;
 			if (auto character = characters[i]; unreal_engine::is_valid_actor(character))
 				callback(character);
+		}
+
+		// The game state's list is not replicated, so a client may find it empty; there the AI are read from the loaded
+		// levels instead.
+		auto world = SDK::UWorld::GetWorld();
+		if (characters.Num() > 0 || is_host() || !world)
+			return;
+
+		for (auto level : world->Levels)
+		{
+			if (!level)
+				continue;
+
+			for (auto actor : level->Actors)
+			{
+				if (unreal_engine::is_valid_actor(actor) && actor->IsA(SDK::ACyberneticCharacter::StaticClass()))
+					callback(static_cast<SDK::ACyberneticCharacter*>(actor));
+			}
 		}
 	}
 }

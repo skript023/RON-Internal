@@ -46,7 +46,7 @@ namespace big
 		teleport,
 		spectate,
 		heal,
-		refill_ammo,
+		add_magazine,
 		godmode,
 		mute,
 		kick

@@ -2,14 +2,59 @@
 #include "utility/weak_object.hpp"
 #include "commands/looped_command.hpp"
 #include "process_event/process_event.hpp"
+#include "host_link.hpp"
 #include "SDK/Engine_parameters.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
 
 namespace big
 {
+	static void end_stuns(SDK::APlayerCharacter* c, float)
+	{
+		if (!c->IsStunned())
+			return;
+
+		for (int i = 1; i < static_cast<int>(SDK::EStunType::ST_MAX); i++)
+		{
+			const auto type = static_cast<SDK::EStunType>(i);
+			if (c->IsStunnedWith(type))
+				c->EndStun(type);
+		}
+	}
+
+	// A stun also shakes the camera with one of the game's Camera_Stun shakes, and each grenade's bang with C_Trap_Explode,
+	// both started in native code, so they are stopped on the next tick.
+	static void stop_stun_shakes(SDK::APlayerCameraManager* camera)
+	{
+		auto shakes = camera ? camera->CachedCameraShakeMod : nullptr;
+		if (!shakes)
+			return;
+
+		static std::unordered_map<SDK::UClass*, bool> stun_shakes;
+		std::vector<SDK::UClass*> playing;
+		for (const auto& active : shakes->ActiveShakes)
+		{
+			auto shake = active.ShakeInstance ? active.ShakeInstance->Class : nullptr;
+			if (!shake)
+				continue;
+
+			auto it = stun_shakes.find(shake);
+			if (it == stun_shakes.end())
+			{
+				const auto name = shake->GetName();
+				it = stun_shakes.emplace(shake, name.starts_with("Camera_Stun_") || name == "C_Trap_Explode_C").first;
+			}
+			if (it->second)
+				playing.push_back(shake);
+		}
+		// Stopping changes the list, so the shakes are stopped once it has been read.
+		for (auto shake : playing)
+			camera->StopAllInstancesOfCameraShake(shake, true);
+	}
+
 	// The host starts every stun in native code, so it cannot be blocked there; the host ends it on the next tick
-	// instead. A client only stops its own screen effects, below, while the host's stun still slows it down.
+	// instead. A client only stops its own screen effects, below, while the host's stun still slows it down, unless the
+	// host runs this mod and ends the client's stuns too.
 	class no_stun : public looped_command
 	{
 		using looped_command::looped_command;
@@ -18,17 +63,14 @@ namespace big
 		{
 			auto controller = unreal_engine::get_player_controller();
 			auto c = unreal_engine::get_character();
-			if (!c || !controller || !controller->HasAuthority() || !c->IsStunned())
-				return;
-
-			for (int i = 1; i < static_cast<int>(SDK::EStunType::ST_MAX); i++)
-			{
-				const auto type = static_cast<SDK::EStunType>(i);
-				if (c->IsStunnedWith(type))
-					c->EndStun(type);
-			}
+			if (c && controller && controller->HasAuthority())
+				end_stuns(c, 0.f);
+			if (controller)
+				stop_stun_shakes(controller->PlayerCameraManager);
 		}
 	};
+
+	static host_link::client_toggle _no_stun_for_clients("no_stun"_hash, end_stuns);
 
 	static no_stun _no_stun("no_stun", "No Stun", "Flashbangs, gas, tasers, pepper spray and less-lethal rounds do not stun you; as a client only their screen effects stop");
 	static bool_command _no_suppression("no_suppression", "No Suppression", "Gunfire and explosions near you do not blur or shake your screen", false);

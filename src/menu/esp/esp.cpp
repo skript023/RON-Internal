@@ -5,6 +5,7 @@
 #include <features/features.hpp>
 #include "events/entity_event.hpp"
 #include "features/hit_marker.hpp"
+#include "features/crosshair.hpp"
 
 namespace big
 {
@@ -139,6 +140,7 @@ namespace big
         if (features::_draw_fov.get_state())
             draw_aimbot_fov();
         hit_marker::draw();
+        crosshair::draw();
 
         if (!features::_esp_enabled.get_state())
             return;

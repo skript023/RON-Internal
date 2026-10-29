@@ -12,6 +12,7 @@ namespace big
             sub->add_option<bool_slider_float_option>("radar"_hash, "radar_range"_hash, 5.f, 0);
             sub->add_option<bool_option<bool>>("grenade_path"_hash);
             sub->add_option<bool_option<bool>>("hit_marker"_hash);
+            sub->add_option<bool_option<bool>>("crosshair"_hash);
 
             sub->add_option<bool_option<bool>>("esp_suspects"_hash);
             sub->add_option<bool_option<bool>>("esp_civilians"_hash);

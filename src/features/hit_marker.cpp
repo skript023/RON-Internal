@@ -1,4 +1,5 @@
 #include "hit_marker.hpp"
+#include "crosshair.hpp"
 #include "commands/bool_command.hpp"
 #include "utility/ron.hpp"
 
@@ -72,9 +73,11 @@ namespace big
 			return;
 
 		const auto now = hit_clock::now();
+		// On the crosshair, which leaves the middle of the screen in Third Person.
 		const auto display = ImGui::GetIO().DisplaySize;
-		const float x = display.x * 0.5f;
-		const float y = display.y * 0.5f;
+		float x = display.x * 0.5f;
+		float y = display.y * 0.5f;
+		crosshair::position(x, y);
 
 		// How far a mark has faded, from 0 when it lands to 1 when it is gone.
 		auto faded = [now](const hit_mark& mark) {

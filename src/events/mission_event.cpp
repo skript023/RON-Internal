@@ -22,7 +22,8 @@ namespace big
 			disarm_trap,
 			remove_wedge,
 			break_door,
-			blow_up_door
+			blow_up_door,
+			disarm
 		};
 
 		// What the render thread may read. Everything else here belongs to the game thread.
@@ -311,7 +312,7 @@ namespace big
 				{ "Status", ron::health_status_name(status) },
 				{ "Stress", std::format("{:.0f}", c->Stress) },
 				{ "Complying", complying },
-				{ "Armed", c->GetEquippedWeapon() ? "Yes" : "No" },
+				{ "Armed", mission::is_armed(c) ? "Yes" : "No" },
 				{ "Explosive vest", c->IsWearingExplosiveVest() ? "Yes" : "No" },
 				{ "Hostage", hostage },
 				{ "Distance", std::format("{:.0f} m", player::get_player_coords().GetDistanceToInMeters(c->K2_GetActorLocation())) },
@@ -325,6 +326,11 @@ namespace big
 				{
 					card.actions.push_back("Surrender");
 					actions.push_back(target_action::surrender);
+				}
+				if (mission::is_armed(c))
+				{
+					card.actions.push_back("Disarm");
+					actions.push_back(target_action::disarm);
 				}
 				card.actions.push_back("Knock Out");
 				actions.push_back(target_action::knockout);
@@ -532,6 +538,7 @@ namespace big
 			{
 			case target_action::arrest: mission::arrest(character); break;
 			case target_action::surrender: mission::surrender(character); break;
+			case target_action::disarm: mission::disarm(character); break;
 			case target_action::knockout: mission::knockout(character); break;
 			case target_action::unlock: mission::set_door_locked(door, false); break;
 			case target_action::lock: mission::set_door_locked(door, true); break;

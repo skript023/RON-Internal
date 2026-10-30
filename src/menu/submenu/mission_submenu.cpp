@@ -18,6 +18,7 @@ namespace big
             sub->add_option<reguler_option>("auto_win"_hash);
             sub->add_option<reguler_option>("auto_arrest"_hash);
             sub->add_option<reguler_option>("surrender_suspects"_hash);
+            sub->add_option<reguler_option>("disarm_suspects"_hash);
             sub->add_option<reguler_option>("knockout_suspects"_hash);
             sub->add_option<reguler_option>("report_all"_hash);
             sub->add_option<reguler_option>("collect_evidence"_hash);

@@ -22,7 +22,7 @@ namespace big
 	static bool_command _accept_client_requests("accept_client_requests", "Accept Client Requests", "Clients running this mod may ask you, the host, to run features for them", false);
 
 	// Mission actions that act on the whole mission, so the host running its own command does what the client asked.
-	static constexpr joaat_t host_actions[] = {"auto_arrest"_hash, "report_all"_hash, "collect_evidence"_hash, "surrender_suspects"_hash,
+	static constexpr joaat_t host_actions[] = {"auto_arrest"_hash, "report_all"_hash, "collect_evidence"_hash, "surrender_suspects"_hash, "disarm_suspects"_hash,
 	    "knockout_suspects"_hash, "unlock_doors"_hash, "open_doors"_hash, "disarm_traps"_hash, "remove_wedges"_hash, "auto_win"_hash};
 
 	// Host-only toggles that act on the whole lobby, so a client's request turns the host's own toggle on or off.

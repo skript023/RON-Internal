@@ -3,6 +3,7 @@
 #include "script.hpp"
 #include "commands/command.hpp"
 #include "commands/looped_command.hpp"
+#include "process_event/process_event.hpp"
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
@@ -96,6 +97,78 @@ namespace big::mission
 		return static_cast<int>(targets.size() + reportables.size());
 	}
 
+	// Every weapon the character carries, in hand or holstered.
+	static std::vector<SDK::ABaseItem*> weapons_of(SDK::ACyberneticCharacter* character)
+	{
+		std::vector<SDK::ABaseItem*> held;
+		if (auto inventory = character->InventoryComp)
+		{
+			for (auto item : inventory->InventoryItems)
+			{
+				if (unreal_engine::is_valid_actor(item) && item->IsA(SDK::ABaseWeapon::StaticClass()))
+					held.push_back(item);
+			}
+		}
+		return held;
+	}
+
+	bool is_armed(SDK::ACyberneticCharacter* character)
+	{
+		return !weapons_of(character).empty();
+	}
+
+	// Every weapon the character carries, thrown to the floor marked as evidence, which Collect All Evidence picks up.
+	static std::vector<SDK::ABaseItem*> drop_weapons(SDK::ACyberneticCharacter* character)
+	{
+		auto held = weapons_of(character);
+		for (auto item : held)
+			character->InventoryComp->ThrowSpecificItem(item, true);
+		return held;
+	}
+
+	// A suspect's weapons go on the floor as evidence without them giving up. Each is marked bNoPickup, which the game's
+	// own pickup ignores, as a suspect was logged taking its gun back a minute later; block_pickup stops that instead.
+	// A pistol thrown from its holster was seen hanging at the hip until the suspect was shot, so every body is woken.
+	void disarm(SDK::ACyberneticCharacter* character)
+	{
+		if (!ron::is_active(character))
+			return;
+
+		for (auto item : drop_weapons(character))
+		{
+			item->bNoPickup = true;
+			if (auto mesh = item->ItemMesh)
+				mesh->WakeAllRigidBodies();
+		}
+	}
+
+	// A suspect picking up a gun takes it when the pickup completes, so the pickup of a gun marked bNoPickup is stopped
+	// there; the suspect tries again and again, and the gun stays on the floor.
+	class block_pickup : public process_event
+	{
+		using process_event::process_event;
+
+		eExecutionStatus on_call(SDK::UObject* _this, SDK::UFunction*, void*) override
+		{
+			auto item = static_cast<SDK::UPickupItemActivity*>(_this)->PickupItem;
+			if (unreal_engine::is_valid_actor(item) && item->bNoPickup)
+				return eExecutionStatus::EXECUTION_INTERCEPTED;
+			return eExecutionStatus::EXECUTION_CONTINUE;
+		}
+	};
+
+	static block_pickup _block_pickup("Function ReadyOrNot.PickupItemActivity.OnPickupItemComplete");
+
+	int disarm_suspects()
+	{
+		auto targets = collect_ai([](SDK::ACyberneticCharacter* c) {
+			return c->IsA(SDK::ASuspectCharacter::StaticClass()) && ron::is_active(c) && is_armed(c);
+		});
+		for (auto character : targets)
+			disarm(character);
+		return static_cast<int>(targets.size());
+	}
+
 	int collect_evidence()
 	{
 		auto player = unreal_engine::get_character();
@@ -109,20 +182,7 @@ namespace big::mission
 			return is_suspect_or_civilian(c) && (c->IsArrested() || c->IsDeadOrUnconscious() || c->IsIncapacitated());
 		});
 		for (auto character : disarmed)
-		{
-			auto inventory = character->InventoryComp;
-			if (!inventory)
-				continue;
-
-			std::vector<SDK::ABaseItem*> held;
-			for (auto item : inventory->InventoryItems)
-			{
-				if (unreal_engine::is_valid_actor(item) && item->IsA(SDK::ABaseWeapon::StaticClass()))
-					held.push_back(item);
-			}
-			for (auto item : held)
-				inventory->ThrowSpecificItem(item, true);
-		}
+			drop_weapons(character);
 
 		// PickupEvidence bags a dropped weapon, as the earlier Collect All Evidance used it; given other items and the
 		// mission's evidence it faulted inside the game before anything was collected. The mission's own evidence, such
@@ -391,6 +451,7 @@ namespace big
 	static mission_action _report_all("report_all", "Report All", "Reports everyone arrested or down, and every reportable item, to TOC (host only)", "{} reported.", mission::report_all);
 	static mission_action _collect_evidence("collect_evidence", "Collect All Evidence", "Drops the weapons of everyone cuffed or down, then picks up every weapon and piece of evidence (host only)", "{} collected.", mission::collect_evidence);
 	static mission_action _surrender_suspects("surrender_suspects", "Surrender Suspects", "Every suspect still fighting gives up (host only)", "{} surrendered.", mission::surrender_suspects);
+	static mission_action _disarm_suspects("disarm_suspects", "Disarm Suspects", "Every armed suspect drops their weapons as evidence, without giving up (host only)", "{} disarmed.", mission::disarm_suspects);
 	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds (host only)", "{} knocked out.", mission::knockout_suspects);
 	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad (host only)", "{} doors unlocked.", mission::unlock_doors);
 	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut (host only)", "{} doors opened.", mission::open_doors);

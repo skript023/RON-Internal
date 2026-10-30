@@ -15,6 +15,7 @@ namespace big::mission
 	int report_all();
 	int collect_evidence();
 	int surrender_suspects();
+	int disarm_suspects();
 	int knockout_suspects();
 	int unlock_doors();
 	int open_doors();
@@ -24,6 +25,9 @@ namespace big::mission
 
 	void arrest(SDK::ACyberneticCharacter* character);
 	void surrender(SDK::ACyberneticCharacter* character);
+	void disarm(SDK::ACyberneticCharacter* character);
+	// Whether the character carries a weapon, in hand or holstered.
+	bool is_armed(SDK::ACyberneticCharacter* character);
 	void knockout(SDK::ACyberneticCharacter* character);
 	void set_door_locked(SDK::ADoor* door, bool locked);
 	void disarm_door_trap(SDK::ADoor* door);

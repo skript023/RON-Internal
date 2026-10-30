@@ -243,10 +243,10 @@ namespace big
 			return enter;
 		}
 
-		// The game sets bLookingAtDoor but leaves lastHighlightedDoor empty, so the door is the first door leaf your line
-		// of sight crosses, up to 15 m; the whole door also spans its frame's interaction boxes and stays after the leaf is
-		// blown away, so only an unbroken leaf counts. A trace stops it at what blocks the view, with a metre to spare:
-		// glass doors let a trace through, and some doors sit inside the collision of the wall around them.
+		// The game sets bLookingAtDoor but leaves lastHighlightedDoor empty, so the door is the one your line of sight hits
+		// within 15 m, or else the first door leaf it crosses up to a metre past what blocks the view: glass doors let a
+		// trace through, and some doors sit inside the collision of the wall around them. The whole door also spans its
+		// frame's interaction boxes and stays after the leaf is blown away, so only an unbroken leaf counts.
 		SDK::ADoor* door_under_crosshair(SDK::APlayerController* controller, SDK::APlayerCharacter* player)
 		{
 			auto camera = controller->PlayerCameraManager;
@@ -263,8 +263,12 @@ namespace big
 			{
 				// Someone in front of the door is who you look at.
 				auto blocker = hit.Component.Get();
-				if (blocker && blocker->GetOwner() && blocker->GetOwner()->IsA(SDK::AReadyOrNotCharacter::StaticClass()))
+				auto owner = blocker ? blocker->GetOwner() : nullptr;
+				if (owner && owner->IsA(SDK::AReadyOrNotCharacter::StaticClass()))
 					return nullptr;
+				// Some doors are built of chunks alone and leave DoorStatic empty, so a door the line hits is taken as it is.
+				if (owner && owner->IsA(SDK::ADoor::StaticClass()) && !static_cast<SDK::ADoor*>(owner)->IsDoorBroken())
+					return static_cast<SDK::ADoor*>(owner);
 				reach = (std::min)(reach, hit.Distance + 100.0);
 			}
 

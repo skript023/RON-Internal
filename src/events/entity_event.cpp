@@ -550,10 +550,6 @@ namespace big
 			if (current_vel.Dot(current_vel) < 100.0)
 				break;
 		}
-
-		SDK::FVector2D hit_screen;
-		if (g_predict.ReturnValue && controller->ProjectWorldLocationToScreen(g_predict.PredictResult.HitResult.Location, &hit_screen, false))
-			arc.push_back({ hit_screen, hit_screen });
 	}
 
 	static void build_frame()

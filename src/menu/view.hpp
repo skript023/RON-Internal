@@ -15,6 +15,7 @@ namespace big
 			aimbot_submenu();
 			teleport_submenu();
 			online_players_submenu();
+			achievement_submenu();
 			setting_submenu();
 		}
 	public:
@@ -33,6 +34,7 @@ namespace big
 		static void world_submenu();
 		static void aimbot_submenu();
 		static void online_players_submenu();
+		static void achievement_submenu();
 		static void teleport_submenu();
 		static void setting_submenu();
 	};

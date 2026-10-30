@@ -33,6 +33,7 @@ namespace big
 		SubmenuSettingsInput,
 		SubmenuSelectedPlayer,
 		SubmenuMission,
-		SubmenuWorld
+		SubmenuWorld,
+		SubmenuAchievements
 	};
 }

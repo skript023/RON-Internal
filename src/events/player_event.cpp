@@ -4,6 +4,9 @@
 #include "utility/player.hpp"
 #include "utility/ron.hpp"
 #include "features/host_link.hpp"
+#include "SDK/W_PlayersList_Entry_classes.hpp"
+#include "SDK/UMG_classes.hpp"
+#include "SDK/CommonUI_classes.hpp"
 
 #include <astra/host/notification.hpp>
 
@@ -119,6 +122,258 @@ namespace big
 				return static_cast<SDK::APlayerCharacter*>(pawn);
 
 			return nullptr;
+		}
+
+		// The game takes your name from your player state and the lobby list rebuilds its rows from it, so a name
+		// picked here goes to both: the state through the game's own server call, and the text of a row that is still
+		// showing the old name.
+		std::string g_spoof_name;
+		std::string g_real_name;
+		clock::time_point g_spoof_sent{};
+		int g_spoof_attempts = 0;
+		weak_object<SDK::APlayerState> g_spoof_state; // the state the tries were made on, so a new lobby starts over
+
+		// The online platform type the list compares each player against the viewer's own. Steam's is 4000, so any
+		// other number renders the row as another platform. It follows the name: a spoofed name comes with a non-Steam
+		// badge, and putting the name back puts 4000 back.
+		int g_platform_type = 4000;
+		bool g_platform_type_set = false;
+		int g_platform_attempts = 0;
+		clock::time_point g_platform_sent{};
+
+		std::wstring widen(std::string_view text)
+		{
+			return std::wstring(text.begin(), text.end());
+		}
+
+		SDK::APlayerState* own_state()
+		{
+			auto controller = unreal_engine::get_player_controller();
+			return controller ? controller->PlayerState : nullptr;
+		}
+
+		void ask_server_for_name(SDK::APlayerState* state)
+		{
+			if (!state->IsA(SDK::AReadyOrNotPlayerState::StaticClass()))
+				return;
+
+			// Authority here means the call runs on this machine instead of reaching the server.
+			const auto role = state->GetLocalRole();
+			LOG(INFO) << "Change Name: sending " << g_spoof_name << " with role " << static_cast<int>(role)
+			          << (role == SDK::ENetRole::ROLE_Authority ? " (local)" : " (to the server)");
+
+			const auto wide = widen(g_spoof_name);
+			static_cast<SDK::AReadyOrNotPlayerState*>(state)->Server_SetPlayerName(SDK::BasicFilesImpleUtils::StringToName(wide.c_str()));
+
+			g_spoof_sent = clock::now();
+			++g_spoof_attempts;
+		}
+
+		void apply_platform_fields()
+		{
+			auto state = own_state();
+			if (!state || !state->IsA(SDK::AReadyOrNotPlayerState::StaticClass()))
+				return;
+
+			auto ron_state = static_cast<SDK::AReadyOrNotPlayerState*>(state);
+			g_platform_sent = clock::now();
+			++g_platform_attempts;
+
+			// The host is the server and writes the field itself; a client's call for it is validated against the
+			// platform it really connected from, so that one only lands when the values match.
+			if (ron::is_host())
+			{
+				ron_state->OnlinePlatformType = g_platform_type;
+				return;
+			}
+
+			if (auto controller = ron::controller())
+				controller->Server_SetPlatformTypes(g_platform_type, ron_state->GamePlatform);
+		}
+
+		void keep_platform()
+		{
+			if (!g_platform_type_set)
+				return;
+
+			auto state = own_state();
+			if (!state || !state->IsA(SDK::AReadyOrNotPlayerState::StaticClass()))
+				return;
+
+			if (static_cast<SDK::AReadyOrNotPlayerState*>(state)->OnlinePlatformType == g_platform_type)
+			{
+				g_platform_attempts = 0;
+				return;
+			}
+
+			if (!ron::is_host() && g_platform_attempts >= 3)
+				return;
+
+			if (clock::now() - g_platform_sent < 3s)
+				return;
+
+			apply_platform_fields();
+		}
+
+		// The server answers the call above a moment later, so a name that has not come back yet is not asked for
+		// again, and the asking stops after a few tries instead of running for the whole match. A new lobby brings a
+		// new player state, which starts the asking over.
+		void keep_name()
+		{
+			if (g_spoof_name.empty())
+				return;
+
+			auto state = own_state();
+			if (!state)
+				return;
+
+			if (g_spoof_state != state)
+			{
+				g_spoof_state = state;
+				g_spoof_attempts = 0;
+			}
+
+			if (state->PlayerNamePrivate.ToString() == g_spoof_name)
+			{
+				// It took, so a name the game resets later can be asked for again.
+				g_spoof_attempts = 0;
+				return;
+			}
+
+			if (g_spoof_attempts >= 3)
+				return;
+
+			if (clock::now() - g_spoof_sent < 3s)
+				return;
+
+			ask_server_for_name(state);
+		}
+
+		// TextBlock.SetText, reached by name: the SDK only compiles the game's own function files, so UMG's call
+		// cannot be linked against.
+		void set_text(SDK::UObject* block, const std::string& text)
+		{
+			auto function = block->Class->GetFunction("TextBlock", "SetText");
+			if (!function)
+				return;
+
+			const auto wide = widen(text);
+			const SDK::FString value(wide.c_str());
+			struct
+			{
+				SDK::FText InText;
+			} args{ SDK::UKismetTextLibrary::Conv_StringToText(value) };
+
+			const auto flags = function->FunctionFlags;
+			function->FunctionFlags |= 0x400; // FUNC_Native, the flag the SDK sets before it calls a game function
+			block->ProcessEvent(function, &args);
+			function->FunctionFlags = flags;
+		}
+
+		// Your own entry in the lobby's player list, renamed again after every rebuild of that list.
+		void rename_lobby_entry(bool force)
+		{
+			static auto last = clock::time_point{};
+			if (!force && clock::now() - last < 1s)
+				return;
+			last = clock::now();
+
+			if (g_spoof_name.empty() || g_real_name.empty() || g_spoof_name == g_real_name)
+				return;
+
+			if (!players_list(false))
+				return;
+
+			const auto entry_class = SDK::UW_PlayersList_Entry_C::StaticClass();
+			for (int i = 0; i < SDK::UObject::GObjects->Num(); ++i)
+			{
+				auto object = SDK::UObject::GObjects->GetByIndex(i);
+				if (!object || object->IsDefaultObject() || !object->IsA(entry_class))
+					continue;
+
+				auto entry = static_cast<SDK::UW_PlayersList_Entry_C*>(object);
+				if (!entry->PlayerName)
+					continue;
+
+				const auto entry_name = entry->Player.DisplayName.ToString();
+				const auto real_name = entry->Player.RealName.ToString();
+
+				// Once the game rebuilds the list from the player state the entry already carries the new name, so
+				// both names count as ours; the text is only replaced while the list still shows the old one.
+				const bool ours = entry_name == g_real_name || real_name == g_real_name
+				    || entry_name == g_spoof_name || real_name == g_spoof_name;
+				if (!ours)
+					continue;
+
+				if (entry_name == g_spoof_name)
+					continue;
+
+				// Read what the entry shows instead of remembering the widget: the list is built again with a
+				// new entry now and then, and there can be more than one entry for the same player.
+				const auto name_text = static_cast<SDK::UTextBlock*>(entry->PlayerName);
+				if (name_text->Text.TextData && name_text->Text.ToString() == g_spoof_name)
+					continue;
+
+				set_text(entry->PlayerName, g_spoof_name);
+			}
+		}
+
+		void apply_name(const std::string& name)
+		{
+			auto state = own_state();
+			if (!state)
+			{
+				notification::warning("Change Name", "There is no player of yours to rename yet.");
+				return;
+			}
+
+			const auto current = state->PlayerNamePrivate.ToString();
+			if (g_real_name.empty())
+				g_real_name = current;
+
+			g_spoof_name = name.empty() ? g_real_name : name;
+			g_spoof_attempts = 0;
+			g_spoof_state = state;
+
+			// The platform follows the name.
+			g_platform_type = g_spoof_name == g_real_name ? 4000 : 0;
+			g_platform_type_set = true;
+			g_platform_attempts = 0;
+
+			if (g_spoof_name == current)
+			{
+				notification::info("Change Name", std::format("The name stays {}.", current));
+				return;
+			}
+
+			ask_server_for_name(state);
+			rename_lobby_entry(true);
+			apply_platform_fields();
+			notification::success("Change Name", std::format("Asked the game for {}; an empty box puts {} back.", g_spoof_name, g_real_name));
+		}
+
+		// The host is the server, so the name it writes on another player's state is the one that reaches every
+		// client; the game then republishes it as usual.
+		void apply_other_name(SDK::APlayerState* state, const std::string& name)
+		{
+			if (!ron::require_host("Change Name"))
+				return;
+
+			if (name.empty())
+			{
+				notification::warning("Change Name", "Type the name to give them first.");
+				return;
+			}
+
+			if (!unreal_engine::is_valid_actor(state) || state == own_state())
+				return;
+
+			// A copy the game's own allocator owns, so the property can be replaced and freed as usual later.
+			const auto wide = widen(name);
+			const SDK::FString value(wide.c_str());
+			state->PlayerNamePrivate = SDK::UKismetStringLibrary::Concat_StrStr(value, SDK::FString(L""));
+
+			notification::success("Change Name", std::format("Their name is {} now, for every client.", name));
 		}
 
 		player_info read_player(SDK::APlayerState* state, SDK::APlayerController* controller, SDK::UPlayersList* list, const std::optional<SDK::FVector>& origin)
@@ -295,6 +550,9 @@ namespace big
 
 			check_lobby(gs, players);
 			check_downed(players);
+			keep_name();
+			rename_lobby_entry(false);
+			keep_platform();
 
 			std::lock_guard lock(g_shared.mutex);
 			g_shared.players = std::move(players);
@@ -560,6 +818,30 @@ namespace big
 		async_run([] {
 			if (g_spectating)
 				view_own_character();
+		});
+	}
+
+	void player_event::rename(weak_object<SDK::APlayerState> state, const std::string& name)
+	{
+		auto trimmed = name;
+		const auto first = trimmed.find_first_not_of(' ');
+		const auto last = trimmed.find_last_not_of(' ');
+		trimmed = first == std::string::npos ? std::string{} : trimmed.substr(first, last - first + 1);
+		if (trimmed.size() > 32)
+			trimmed.resize(32);
+
+		async_run([state, trimmed] {
+			auto target = state.get();
+			if (!target)
+			{
+				notification::warning("Change Name", "That player has left.");
+				return;
+			}
+
+			if (target == own_state())
+				apply_name(trimmed);
+			else
+				apply_other_name(target, trimmed);
 		});
 	}
 }

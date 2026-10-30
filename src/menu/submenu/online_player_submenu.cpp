@@ -3,6 +3,7 @@
 #include "utility/ron.hpp"
 #include "../core/submenu.hpp"
 #include "events/player_event.hpp"
+#include "input/input_service.hpp"
 
 namespace big
 {
@@ -96,7 +97,22 @@ namespace big
 				player_event::act(player_action::godmode);
 			});
 			if (player.local)
+			{
+				const auto hint = std::string("The name your entry shows in the lobby's player list and in game, on your screen");
+				sub->add_option<reguler_option>("Change Name", hint.c_str(), [state = player.state] {
+					g_input_service.show("Name to show", [state](std::string const& input) {
+						player_event::rename(state, input);
+					});
+				});
 				return;
+			}
+
+			const auto other_hint = std::string("Host only: their name, written on the server so every client gets it");
+			sub->add_option<reguler_option>("Change Name", other_hint.c_str(), [state = player.state] {
+				g_input_service.show("Name to show", [state](std::string const& input) {
+					player_event::rename(state, input);
+				});
+			});
 
 			sub->add_option<reguler_option>(player.muted ? "Unmute" : "Mute", "Their voice chat, for you only", [] {
 				player_event::act(player_action::mute);

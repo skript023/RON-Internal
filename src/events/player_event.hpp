@@ -68,5 +68,10 @@ namespace big
 		// Called from the render thread; the action itself runs on the game thread.
 		static void act(player_action action);
 		static void stop_spectating();
+
+		// A player's name as this client shows it, in the lobby's player list and in game. Your own name goes to both
+		// and an empty one puts back the name you had; another player's name is the host's to set, for every client.
+		// Called from the render thread; the rename itself runs on the game thread.
+		static void rename(weak_object<SDK::APlayerState> state, const std::string& name);
 	};
 }

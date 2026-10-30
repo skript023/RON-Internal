@@ -26,7 +26,7 @@ namespace big
 	    "knockout_suspects"_hash, "unlock_doors"_hash, "open_doors"_hash, "disarm_traps"_hash, "remove_wedges"_hash, "auto_win"_hash};
 
 	// Host-only toggles that act on the whole lobby, so a client's request turns the host's own toggle on or off.
-	static constexpr joaat_t world_toggles[] = {"freeze_ai"_hash, "slow_motion"_hash, "no_penalty"_hash};
+	static constexpr joaat_t world_toggles[] = {"freeze_ai"_hash, "slow_motion"_hash, "no_penalty"_hash, "one_kick_doors"_hash};
 
 	struct toggle_entry
 	{

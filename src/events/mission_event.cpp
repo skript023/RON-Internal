@@ -532,7 +532,8 @@ namespace big
 
 	namespace
 	{
-		void act_on(target_action action, SDK::ACyberneticCharacter* character, SDK::ADoor* door)
+		// player is who acts: you, or as the host the client that asked.
+		void act_on(target_action action, SDK::ACyberneticCharacter* character, SDK::ADoor* door, SDK::APlayerCharacter* player)
 		{
 			switch (action)
 			{
@@ -550,10 +551,10 @@ namespace big
 			// As if the host had kicked it down or blown it with C2.
 			case target_action::break_door:
 				if (door)
-					door->BreakDoor(false, unreal_engine::get_character());
+					door->BreakDoor(false, player);
 				break;
 			case target_action::blow_up_door:
-				if (auto player = unreal_engine::get_character(); door && player)
+				if (door && player)
 					door->ExplodeDoor(player, player, false);
 				break;
 			}
@@ -561,15 +562,15 @@ namespace big
 
 		// As the host: the inspector action a client chose, on what stands nearest to where the client saw its target,
 		// within 3 m; the client sends action:x:y:z.
-		host_link::client_action _inspector_for_clients("inspector", "Target Inspector", [](SDK::APlayerCharacter*, const std::string& args) {
+		host_link::client_action _inspector_for_clients("inspector", "Target Inspector", [](SDK::APlayerCharacter* player, const std::string& args) {
 			int index = -1;
 			SDK::FVector at{};
 			if (std::sscanf(args.c_str(), "%d:%lf:%lf:%lf", &index, &at.X, &at.Y, &at.Z) != 4 || index < 0
-			    || index > static_cast<int>(target_action::remove_wedge))
+			    || index > static_cast<int>(target_action::disarm))
 				return false;
 
 			const auto action = static_cast<target_action>(index);
-			const bool on_door = action != target_action::arrest && action != target_action::surrender && action != target_action::knockout;
+			const bool on_door = action >= target_action::unlock && action <= target_action::blow_up_door;
 			SDK::ACyberneticCharacter* character = nullptr;
 			SDK::ADoor* door = nullptr;
 			double nearest = 3.0;
@@ -604,7 +605,7 @@ namespace big
 			if (!character && !door)
 				return false;
 
-			act_on(action, character, door);
+			act_on(action, character, door, player);
 			return true;
 		});
 	}
@@ -637,7 +638,7 @@ namespace big
 				return;
 			}
 
-			act_on(action, character.get(), door.get());
+			act_on(action, character.get(), door.get(), unreal_engine::get_character());
 		});
 	}
 

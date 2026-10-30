@@ -13,6 +13,7 @@ namespace big
             sub->add_option<bool_option<bool>>("collectibles_window"_hash);
             sub->add_option<bool_option<bool>>("objective_alerts"_hash);
             sub->add_option<bool_option<bool>>("no_penalty"_hash);
+            sub->add_option<bool_option<bool>>("surrender_on_yell"_hash);
 
             sub->add_option<reguler_option>("auto_win"_hash);
             sub->add_option<reguler_option>("auto_arrest"_hash);

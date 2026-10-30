@@ -15,7 +15,8 @@ namespace big
 	static void turn_off_host_only()
 	{
 		static constexpr joaat_t host_only[] = {"damage"_hash, "damage_multiplier"_hash, "rapid_fire"_hash, "full_auto"_hash, "noclip"_hash,
-		    "instant_cuff"_hash, "infinite_tactical"_hash, "freeze_ai"_hash, "slow_motion"_hash, "no_penalty"_hash, "one_kick_doors"_hash};
+		    "instant_cuff"_hash, "infinite_tactical"_hash, "freeze_ai"_hash, "slow_motion"_hash, "no_penalty"_hash, "one_kick_doors"_hash,
+		    "surrender_on_yell"_hash};
 
 		// No controller, such as while a map loads, says nothing about who hosts.
 		auto controller = unreal_engine::get_player_controller();

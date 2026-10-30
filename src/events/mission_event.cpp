@@ -20,7 +20,9 @@ namespace big
 			unlock,
 			lock,
 			disarm_trap,
-			remove_wedge
+			remove_wedge,
+			break_door,
+			blow_up_door
 		};
 
 		// What the render thread may read. Everything else here belongs to the game thread.
@@ -214,6 +216,77 @@ namespace big
 			return best;
 		}
 
+		// How far along the line from `from` in the unit direction `dir` it enters the box, if it does.
+		std::optional<double> enters_box(const SDK::FVector& from, const SDK::FVector& dir, const SDK::FVector& centre, const SDK::FVector& extent)
+		{
+			const double o[] = {from.X, from.Y, from.Z};
+			const double d[] = {dir.X, dir.Y, dir.Z};
+			const double c[] = {centre.X, centre.Y, centre.Z};
+			const double e[] = {extent.X, extent.Y, extent.Z};
+			double enter = 0.0, leave = DBL_MAX;
+			for (int i = 0; i < 3; ++i)
+			{
+				if (std::abs(d[i]) < 1e-9)
+				{
+					if (std::abs(o[i] - c[i]) > e[i])
+						return std::nullopt;
+					continue;
+				}
+				double in = (c[i] - e[i] - o[i]) / d[i], out = (c[i] + e[i] - o[i]) / d[i];
+				if (in > out)
+					std::swap(in, out);
+				enter = (std::max)(enter, in);
+				leave = (std::min)(leave, out);
+				if (enter > leave)
+					return std::nullopt;
+			}
+			return enter;
+		}
+
+		// The game sets bLookingAtDoor but leaves lastHighlightedDoor empty, so the door is the first door leaf your line
+		// of sight crosses, up to 15 m; the whole door also spans its frame's interaction boxes and stays after the leaf is
+		// blown away, so only an unbroken leaf counts. A trace stops it at what blocks the view, with a metre to spare:
+		// glass doors let a trace through, and some doors sit inside the collision of the wall around them.
+		SDK::ADoor* door_under_crosshair(SDK::APlayerController* controller, SDK::APlayerCharacter* player)
+		{
+			auto camera = controller->PlayerCameraManager;
+			auto gs = ron::game_state();
+			if (!camera || !gs)
+				return nullptr;
+
+			const auto& pov = camera->CameraCachePrivate.POV;
+			const auto dir = SDK::UKismetMathLibrary::GetForwardVector(pov.Rotation);
+			double reach = 1500.0;
+			SDK::FHitResult hit{};
+			if (SDK::UKismetSystemLibrary::LineTraceSingle(player, pov.Location, pov.Location + dir * reach, SDK::ETraceTypeQuery::TraceTypeQuery1, false,
+			        {}, SDK::EDrawDebugTrace::None, &hit, true, {}, {}, 0.f))
+			{
+				// Someone in front of the door is who you look at.
+				auto blocker = hit.Component.Get();
+				if (blocker && blocker->GetOwner() && blocker->GetOwner()->IsA(SDK::AReadyOrNotCharacter::StaticClass()))
+					return nullptr;
+				reach = (std::min)(reach, hit.Distance + 100.0);
+			}
+
+			SDK::ADoor* best = nullptr;
+			double best_at = reach;
+			for (auto door : gs->AllDoors)
+			{
+				if (!unreal_engine::is_valid_actor(door) || !door->DoorStatic)
+					continue;
+
+				SDK::FVector centre, extent;
+				float radius;
+				SDK::UKismetSystemLibrary::GetComponentBounds(door->DoorStatic, &centre, &extent, &radius);
+				if (const auto at = enters_box(pov.Location, dir, centre, extent); at && *at < best_at && door->DoorStatic->IsVisible() && !door->IsDoorBroken())
+				{
+					best = door;
+					best_at = *at;
+				}
+			}
+			return best;
+		}
+
 		astra::inspector character_card(SDK::ACyberneticCharacter* c, std::vector<target_action>& actions)
 		{
 			astra::inspector card;
@@ -286,6 +359,10 @@ namespace big
 				card.actions.push_back("Remove Wedge");
 				actions.push_back(target_action::remove_wedge);
 			}
+			card.actions.push_back("Break");
+			actions.push_back(target_action::break_door);
+			card.actions.push_back("Blow Up");
+			actions.push_back(target_action::blow_up_door);
 
 			card.hint = ron::is_host() ? "Open the menu to act on this door." : "Actions need single player or the host.";
 			return card;
@@ -302,10 +379,10 @@ namespace big
 			auto controller = unreal_engine::get_player_controller();
 			if (player && controller)
 			{
-				if (player->bLookingAtDoor && unreal_engine::is_valid_actor(player->lastHighlightedDoor))
+				if (auto looked_at = door_under_crosshair(controller, player))
 				{
-					door = player->lastHighlightedDoor;
-					card = door_card(player->lastHighlightedDoor, actions);
+					door = looked_at;
+					card = door_card(looked_at, actions);
 				}
 				else if (auto target = character_under_crosshair(controller))
 				{
@@ -458,6 +535,15 @@ namespace big
 			case target_action::remove_wedge:
 				if (door)
 					door->RemoveWedges();
+				break;
+			// As if the host had kicked it down or blown it with C2.
+			case target_action::break_door:
+				if (door)
+					door->BreakDoor(false, unreal_engine::get_character());
+				break;
+			case target_action::blow_up_door:
+				if (auto player = unreal_engine::get_character(); door && player)
+					door->ExplodeDoor(player, player, false);
 				break;
 			}
 		}

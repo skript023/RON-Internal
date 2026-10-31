@@ -39,9 +39,19 @@ namespace big
 
 		bool bCalculateProcRecoil;
 		bool bUseFireLoopAnims;
+
+		std::vector<SDK::FRotator> RecoilPattern;
 	};
 
 	static weapon_backup<recoil_backup> g_backup;
+
+	static std::vector<SDK::FRotator> pattern_of(SDK::ABaseMagazineWeapon* wep)
+	{
+		std::vector<SDK::FRotator> pattern;
+		for (int i = 0; i < wep->RecoilPattern.Num(); ++i)
+			pattern.push_back(wep->RecoilPattern[i]);
+		return pattern;
+	}
 
 	static void backup_weapon(SDK::ABaseMagazineWeapon* wep)
 	{
@@ -75,7 +85,9 @@ namespace big
 				wep->RecoilDampStrength,
 
 				wep->bCalculateProcRecoil,
-				wep->bUseFireLoopAnims
+				wep->bUseFireLoopAnims,
+
+				pattern_of(wep)
 			});
 		}
 	}
@@ -109,6 +121,10 @@ namespace big
 
 		wep->bCalculateProcRecoil = false;
 		wep->bUseFireLoopAnims = false;
+
+		// The kick of each shot from the hip; aiming scales it by ADSRecoilMultiplier, so only hip fire still had it.
+		for (int i = 0; i < wep->RecoilPattern.Num(); ++i)
+			wep->RecoilPattern[i] = {};
 	}
 
 	static void restore_all()
@@ -143,6 +159,9 @@ namespace big
 
 			wep->bCalculateProcRecoil = data.bCalculateProcRecoil;
 			wep->bUseFireLoopAnims = data.bUseFireLoopAnims;
+
+			for (int i = 0; i < wep->RecoilPattern.Num() && i < static_cast<int>(data.RecoilPattern.size()); ++i)
+				wep->RecoilPattern[i] = data.RecoilPattern[i];
 		}
 
 		g_backup.clear();

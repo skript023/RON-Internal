@@ -45,7 +45,7 @@ namespace big
 		// Decodes Astra's built-in banners and uploads them; call once the renderer has its device.
 		void load_textures();
 		bool load_banner(const std::string& name, const unsigned char* bytes, int size);
-		// Points the header at the banner g_settings.window.banner chooses.
+		// Points the header at the banner canvas::config().banner chooses.
 		void update_banner();
 
 		void dx_on_opened();

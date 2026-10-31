@@ -341,7 +341,7 @@ namespace big
 		icons_config.PixelSnapH = true;
 		icons_config.FontDataOwnedByAtlas = FontDataOwnedByAtlas;
 
-		g_settings.window.font_icon = ImGui::GetIO().Fonts->AddFontFromMemoryTTF((void*)font_icons, sizeof(font_icons), font_size, &icons_config, icons_ranges);
+		ImGui::GetIO().Fonts->AddFontFromMemoryTTF((void*)font_icons, sizeof(font_icons), font_size, &icons_config, icons_ranges);
 	}
 
 	void renderer::load_texture(ID3D11Device*)

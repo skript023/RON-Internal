@@ -3,7 +3,7 @@
 
 #include "task_mgr.hpp"
 #include "utility/player.hpp"
-#include "input/input_service.hpp"
+#include <astra/host/input_service.hpp>
 #include <custom_teleport/custom_teleport_service.hpp>
 
 #include <astra/components.hpp>

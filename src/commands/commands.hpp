@@ -1,6 +1,6 @@
 #pragma once
 #include "utility/joaat.hpp"
-#include "settings/state_serializer.hpp"
+#include <astra/host/state_serializer.hpp>
 
 namespace big
 {

@@ -15,7 +15,7 @@
 #include "menu/view.hpp"
 #include "menu/esp/esp.h"
 
-#include <input/input_service.hpp>
+#include <astra/host/input_service.hpp>
 
 namespace big
 {
@@ -100,14 +100,14 @@ namespace big
 
 	void gui::script_init()
 	{
-		notification::success("Welcome", std::format("{} trainer injected. Press {} to open the menu.", GAME_NAME, astra::menu_key_name(static_cast<int>(g_settings.window.open_key))));
+		notification::success("Welcome", std::format("{} trainer injected. Press {} to open the menu.", GAME_NAME, astra::menu_key_name(canvas::config().open_key())));
 	}
 
 	void gui::wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	{
 		if (msg == WM_KEYDOWN && wparam == VK_ESCAPE)
 		{
-			if (g_input_service.is_open()) g_input_service.hide();
+			if (input_service::is_open()) input_service::hide();
 		}
 	}
 
@@ -120,7 +120,7 @@ namespace big
 			return;
 		}
 
-		int active_index = g_settings.window.banner;
+		int active_index = canvas::config().banner;
 		if (active_index < 0 || static_cast<std::size_t>(active_index) >= m_banners.size())
 			active_index = 0;
 

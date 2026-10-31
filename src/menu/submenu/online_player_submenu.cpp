@@ -3,7 +3,7 @@
 #include "utility/ron.hpp"
 #include "../core/submenu.hpp"
 #include "events/player_event.hpp"
-#include "input/input_service.hpp"
+#include <astra/host/input_service.hpp>
 
 #include <astra/components.hpp>
 #include <astra/host/canvas.hpp>

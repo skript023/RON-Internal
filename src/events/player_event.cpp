@@ -7,6 +7,7 @@
 #include "SDK/W_PlayersList_Entry_classes.hpp"
 #include "SDK/UMG_classes.hpp"
 #include "SDK/CommonUI_classes.hpp"
+#include "SDK/GameplayTags_classes.hpp"
 
 #include <astra/host/notification.hpp>
 
@@ -596,12 +597,230 @@ namespace big
 				controller->SetViewTargetWithBlend(character, 0.3f, SDK::EViewTargetBlendFunction::VTBlend_Cubic, 0.f, false);
 		}
 
+		SDK::UStatSubsystem* stat_subsystem()
+		{
+			auto world = SDK::UWorld::GetWorld();
+			return world
+			    ? static_cast<SDK::UStatSubsystem*>(
+			          SDK::USubsystemBlueprintLibrary::GetGameInstanceSubsystem(world, SDK::UStatSubsystem::StaticClass()))
+			    : nullptr;
+		}
+
+		// One career stat as the last read on the game thread saw it.
+		std::mutex g_stats_mutex;
+		std::vector<stat_info> g_stats;
+		std::atomic<bool> g_stats_wanted = false;
+
+		// The names a text stat can hold, per loadout slot, read once from the same lists the give item panel shows.
+		std::mutex g_choices_mutex;
+		std::map<std::string, std::vector<std::string>> g_choices;
+
+		void read_stat_choices()
+		{
+			auto world = SDK::UWorld::GetWorld();
+			auto manager = world ? SDK::ULoadoutManager::Get(world) : nullptr;
+			if (!manager)
+				return;
+
+			std::map<std::string, std::vector<std::string>> choices;
+			auto collect = [&choices](const char* slot, SDK::TArray<SDK::ABaseItem*>& items) {
+				auto& names = choices[slot];
+				for (auto item : items)
+				{
+					if (!item || !item->ItemName.TextData)
+						continue;
+
+					auto name = item->ItemName.ToString();
+					if (name.empty() || std::find(names.begin(), names.end(), name) != names.end())
+						continue;
+
+					names.push_back(std::move(name));
+				}
+			};
+
+			collect("primary", manager->PrimaryWeapons);
+			collect("secondary", manager->SecondaryWeapons);
+			collect("longtactical", manager->LongTacticalItems);
+			collect("armor", manager->BodyArmors);
+
+			// Difficulty names come from the game's own list; the stat holds them lower case, such as "casual", so the
+			// leaf of each tag is lower cased here.
+			SDK::TArray<SDK::FGameplayTag> difficulties;
+			if (SDK::UBpGameplayHelperLib::GetAllDifficultyNames(&difficulties))
+			{
+				auto& names = choices["difficulty"];
+				for (const auto& tag : difficulties)
+				{
+					// A gameplay tag is only its name, which the dumper leaves protected, so it is read as the name.
+					const auto full = reinterpret_cast<const SDK::FName&>(tag).ToString();
+					auto leaf = full.substr(full.find_last_of('.') + 1);
+				std::transform(leaf.begin(), leaf.end(), leaf.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+					if (!leaf.empty() && std::find(names.begin(), names.end(), leaf) == names.end())
+						names.push_back(std::move(leaf));
+				}
+			}
+
+			// Mission names are the level assets' own names, which is what the stat holds. The levels are asked for
+			// first, since the game only keeps them resident from the mission select onwards.
+			const auto levels = SDK::UBpGameplayHelperLib::GetLevels();
+			auto& missions = choices["mission"];
+			for (int i = 0; i < SDK::UObject::GObjects->Num(); ++i)
+			{
+				auto object = SDK::UObject::GObjects->GetByIndex(i);
+				if (!object || !object->IsA(SDK::ULevelData::StaticClass()))
+					continue;
+
+				auto name = static_cast<SDK::ULevelData*>(object)->LevelName.ToString();
+				if (name.empty() || std::find(missions.begin(), missions.end(), name) != missions.end())
+					continue;
+
+				missions.push_back(std::move(name));
+			}
+
+			// No level asset was resident, so the names the game shows for them are offered instead.
+			if (missions.empty())
+			{
+				for (const auto& level : levels)
+				{
+					auto name = level.FriendlyLevelName.TextData ? level.FriendlyLevelName.ToString() : std::string{};
+					if (name.empty() || std::find(missions.begin(), missions.end(), name) != missions.end())
+						continue;
+
+					missions.push_back(std::move(name));
+				}
+			}
+
+			std::sort(missions.begin(), missions.end());
+			std::sort(choices["difficulty"].begin(), choices["difficulty"].end());
+
+			std::lock_guard lock(g_choices_mutex);
+			g_choices = std::move(choices);
+		}
+
+		void read_stats()
+		{
+			auto subsystem = stat_subsystem();
+			auto table = subsystem && subsystem->StatsDataTableWrapper ? subsystem->StatsDataTableWrapper->StatDefinitions : nullptr;
+			if (!subsystem || !table)
+				return;
+
+			// The loadout names behind the text stats are read once; those lists only change between missions.
+			static std::atomic<bool> choices_read = false;
+			if (!choices_read.exchange(true))
+				read_stat_choices();
+
+			std::vector<stat_info> stats;
+			for (int i = 0; i < table->RowMap.Max(); ++i)
+			{
+				if (!table->RowMap.IsValidIndex(i))
+					continue;
+
+				const auto definition = reinterpret_cast<const SDK::FStatDefinition*>(table->RowMap[i].Value());
+				if (!definition)
+					continue;
+
+				stat_info info;
+				info.id = definition->StatID.ToString();
+				if (info.id.empty())
+					continue;
+
+				info.label = definition->DisplayName.TextData ? definition->DisplayName.ToString() : std::string{};
+				if (info.label.empty())
+					info.label = info.id;
+				info.type = static_cast<int>(definition->StatType);
+				info.is_time = definition->IsTime;
+
+				const auto wide = widen(info.id);
+				const SDK::FString key(wide.c_str());
+				info.numeric = subsystem->IsStatNumeric(key);
+				info.value = subsystem->GetStatValue(key);
+				info.text = subsystem->GetStatString(key).ToString();
+
+				stats.push_back(std::move(info));
+			}
+
+			std::lock_guard lock(g_stats_mutex);
+			g_stats = std::move(stats);
+		}
+
+		// An average holds the written number divided by the samples behind it, so it is set by writing the target times
+		// that count. The count is measured with one large write, then corrected once if the read back is still off.
+		void apply_average(SDK::UStatSubsystem* subsystem, const SDK::FString& key, const stat_info& stat, std::int64_t target)
+		{
+			constexpr std::int64_t probe_value = 10000000;
+
+			subsystem->ClearStat(key);
+			subsystem->UpdateStat(key, probe_value);
+			const auto probe = subsystem->GetStatValue(key);
+			const auto count = probe > 0 ? (probe_value + probe / 2) / probe : 1;
+
+			subsystem->ClearStat(key);
+			subsystem->UpdateStat(key, target * count);
+			auto after = subsystem->GetStatValue(key);
+
+			// A second pass, since the probe is rounded down and a stat with no samples at all reports zero.
+			if (after > 0 && after != target)
+			{
+				const auto real = (target * count) / after;
+				subsystem->ClearStat(key);
+				subsystem->UpdateStat(key, target * (real > 0 ? real : 1));
+				after = subsystem->GetStatValue(key);
+			}
+
+			notification::success("Career Stats", std::format("{} is now {}.", stat.label, after));
+		}
+
+		// An average is the written value divided by the samples behind it, so writing one would only scale it; the
+		// other numerics take the value as it is once the stat is cleared, and favourite/text stats hold a string.
+		void apply_stat(const stat_info& stat, const std::string& value)
+		{
+			auto subsystem = stat_subsystem();
+			if (!subsystem)
+			{
+				notification::warning("Career Stats", "The stat subsystem is not up yet.");
+				return;
+			}
+
+			const auto wide = widen(stat.id);
+			const SDK::FString key(wide.c_str());
+
+			if (stat.type == 5 || stat.type == 6 || !stat.numeric)
+			{
+				if (value.empty())
+				{
+					notification::warning("Career Stats", "Type the text to store first.");
+					return;
+				}
+
+				const auto value_wide = widen(value);
+				subsystem->UpdateStatString(key, SDK::FString(value_wide.c_str()));
+				notification::success("Career Stats", std::format("{} is now {}.", stat.label, value));
+			}
+			else if (stat.type == 4)
+			{
+				apply_average(subsystem, key, stat, std::atoi(value.c_str()));
+			}
+			else
+			{
+				const auto number = std::atoi(value.c_str());
+				subsystem->ClearStat(key);
+				subsystem->UpdateStat(key, number);
+				notification::success("Career Stats", std::format("{} is now {}.", stat.label, number));
+			}
+
+			g_stats_wanted = true;
+		}
+
 		void tick()
 		{
 			static auto last_read = clock::time_point{};
 			if (clock::now() - last_read < 250ms)
 				return;
 			last_read = clock::now();
+
+			// The stats page asks for a fresh copy every frame it is drawn, so the read happens only while it is open.
+			if (g_stats_wanted.exchange(false))
+				read_stats();
 
 			// The camera goes back to you once the player you watch leaves, or their character is gone.
 			if (g_spectating && !unreal_engine::is_valid_actor(g_spectated.get()))
@@ -902,6 +1121,39 @@ namespace big
 			if (g_spectating)
 				view_own_character();
 		});
+	}
+
+	std::vector<stat_info> player_event::stats()
+	{
+		// The menu is drawing the page, so the game thread reads the list once on its next pass.
+		g_stats_wanted = true;
+
+		std::lock_guard lock(g_stats_mutex);
+		return g_stats;
+	}
+
+	void player_event::set_stat(const stat_info& stat, const std::string& value)
+	{
+		async_run([stat, value] {
+			apply_stat(stat, value);
+		});
+	}
+
+	std::vector<std::string> player_event::stat_choices(const std::string& id)
+	{
+		// A favourite weapon is stored by the name the loadout screen gives it, so the names are offered instead of a
+		// free text box; every other text stat, such as a mission or a difficulty, is typed.
+		for (const auto* slot : {"primary", "secondary", "longtactical", "armor", "mission", "difficulty"})
+		{
+			if (id.find(slot) == std::string::npos)
+				continue;
+
+			std::lock_guard lock(g_choices_mutex);
+			const auto found = g_choices.find(slot);
+			return found == g_choices.end() ? std::vector<std::string>{} : found->second;
+		}
+
+		return {};
 	}
 
 	void player_event::rename(weak_object<SDK::APlayerState> state, const std::string& name)

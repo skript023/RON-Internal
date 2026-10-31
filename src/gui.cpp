@@ -35,6 +35,7 @@ namespace big
 		INSPECTOR,
 		COLLECTIBLES,
 		BOOKMARKS,
+		CAREER_STATS,
 		GIVE_ITEM,
 		INPUT,
 
@@ -49,6 +50,7 @@ namespace big
 		this->add_dx_callback(view::target_inspector, eRenderPriority::INSPECTOR);
 		this->add_dx_callback(view::collectibles_panel, eRenderPriority::COLLECTIBLES);
 		this->add_dx_callback(view::bookmarks_panel, eRenderPriority::BOOKMARKS);
+		this->add_dx_callback(view::career_stats_panel, eRenderPriority::CAREER_STATS);
 		this->add_dx_callback(view::give_item_panel, eRenderPriority::GIVE_ITEM);
 		this->add_dx_callback(view::draw_input, eRenderPriority::INPUT);
 		this->add_dx_callback(view::notifications, eRenderPriority::NOTIFICATIONS);

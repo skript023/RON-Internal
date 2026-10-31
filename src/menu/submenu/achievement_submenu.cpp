@@ -20,10 +20,11 @@ namespace big
 
 			for (const auto& entry : list)
 			{
-				const auto label = std::format("{} {}", entry.unlocked ? "[x]" : "[ ]", entry.display);
-				sub->add_option<reguler_option>(label.c_str(), entry.api_name.c_str(), [api = entry.api_name] {
+				// The lock state rides on the row's status badge instead of a [x] typed into the name, with Locked and
+				// Unlocked in place of the List's Not yet and Done, which read oddly for an achievement.
+				sub->add_option<reguler_option>(entry.display.c_str(), entry.api_name.c_str(), [api = entry.api_name] {
 					achievement_event::unlock_steam(api);
-				});
+				}).set_status(entry.unlocked ? astra::status_kind::done : astra::status_kind::pending, entry.unlocked ? "Unlocked" : "Locked");
 			}
 
 			if (list.empty())

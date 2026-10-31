@@ -77,6 +77,7 @@ namespace big
 	{
 		none,
 		trap,
+		bomb,
 		collectible
 	};
 
@@ -90,6 +91,8 @@ namespace big
 		auto kind = level_kind::none;
 		if (cls->IsSubclassOf(SDK::ATrapActor::StaticClass()))
 			kind = level_kind::trap;
+		else if (cls->IsSubclassOf(SDK::ABombActor::StaticClass()))
+			kind = level_kind::bomb;
 		else if (cls->IsSubclassOf(SDK::ACollectable::StaticClass()))
 			kind = level_kind::collectible;
 
@@ -241,6 +244,17 @@ namespace big
 					auto trap = static_cast<SDK::ATrapActor*>(actor);
 					if (_esp_traps.get_state() && trap->TrapStatus == SDK::ETrapState::TS_Live)
 						add(esp_kind::trap, trap, ron::trap_type_name(trap->TrapType), { 255, 120, 0, 255 });
+					break;
+				}
+				// Shown with the traps, with the time left on its timer when it has one.
+				case level_kind::bomb:
+				{
+					auto bomb = static_cast<SDK::ABombActor*>(actor);
+					if (!_esp_traps.get_state() || bomb->BombState != SDK::EBombState::BS_Active)
+						break;
+
+					const int seconds = static_cast<int>(bomb->TimeUntilExplodes);
+					add(esp_kind::trap, bomb, seconds > 0 ? std::format("Bomb {}:{:02}", seconds / 60, seconds % 60) : "Bomb", { 255, 40, 40, 255 });
 					break;
 				}
 				case level_kind::collectible:

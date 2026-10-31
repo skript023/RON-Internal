@@ -318,6 +318,88 @@ namespace big
 			}
 		}
 
+		// The lobby the tag was last rebuilt in, and with which name: a rejoin brings a new player state whose
+		// name is the Steam account's until the game's own rename lands, so the tag is built before it is right.
+		weak_object<SDK::APlayerState> g_name_tag_state;
+		std::string g_name_tag_name;
+		int g_name_tag_passes = 0;
+
+		// A zero-argument game event, reached by name for the same reason as TextBlock.SetText: the SDK only
+		// compiles some of the game's packages.
+		bool run_event(SDK::UObject* object, const char* class_name, const char* function_name)
+		{
+			auto function = object->Class->GetFunction(class_name, function_name);
+			if (!function)
+				return false;
+
+			const auto flags = function->FunctionFlags;
+			function->FunctionFlags |= 0x400; // FUNC_Native, as the generated code sets before calling a game function
+			object->ProcessEvent(function, nullptr);
+			function->FunctionFlags = flags;
+			return true;
+		}
+
+		// The name on a character's back belongs to the armour item it hangs on: the game spawns that extra, name
+		// already drawn, when the item's skin is applied — once, so a rename or a rejoin leaves the old name there
+		// until the loadout rebuilds the character. Re-running the item's own skin update builds the tag again.
+		void refresh_name_tags()
+		{
+			if (g_spoof_name.empty())
+				return;
+
+			auto state = own_state();
+			if (!state || state->PlayerNamePrivate.ToString() != g_spoof_name)
+				return; // the game has not taken the name yet, so a tag built now would read the old one
+
+			if (g_name_tag_state == state && g_name_tag_name == g_spoof_name)
+				return;
+
+			static auto last = clock::time_point{};
+			if (clock::now() - last < 2s)
+				return;
+			last = clock::now();
+
+			const auto tag_class = SDK::ANameTag::StaticClass();
+			const auto character_class = SDK::AReadyOrNotCharacter::StaticClass();
+
+			int tags = 0;
+			for (int i = 0; i < SDK::UObject::GObjects->Num(); ++i)
+			{
+				auto object = SDK::UObject::GObjects->GetByIndex(i);
+				if (!object || object->IsDefaultObject() || !object->IsA(tag_class))
+					continue;
+
+				// Only the tag worn by our own character is ours; the ones on other players carry their names.
+				auto tag = static_cast<SDK::ANameTag*>(object);
+				++tags;
+				auto parent = tag->GetAttachParentActor();
+				if (!parent || !unreal_engine::is_valid_actor(parent) || !parent->IsA(character_class))
+					continue;
+				if (static_cast<SDK::AReadyOrNotCharacter*>(parent)->PlayerState != state)
+					continue;
+
+				auto item = tag->Owner;
+				if (!item || !unreal_engine::is_valid_actor(item) || !item->IsA(SDK::ABaseItem::StaticClass()))
+					continue;
+
+				const bool applied = run_event(item, "BaseItem", "OnRep_Skin");
+				LOG(INFO) << "Change Name: " << (applied ? "rebuilt" : "could not rebuild") << " the tag on the back of "
+				          << item->GetName();
+
+				g_name_tag_state = state;
+				g_name_tag_name = g_spoof_name;
+				g_name_tag_passes = 0;
+				return;
+			}
+
+			// The character may still be loading; a new tag is looked at on a later pass.
+			if (!tags && ++g_name_tag_passes >= 60)
+			{
+				g_name_tag_state = state;
+				g_name_tag_name = g_spoof_name;
+			}
+		}
+
 		void apply_name(const std::string& name)
 		{
 			auto state = own_state();
@@ -552,6 +634,7 @@ namespace big
 			check_downed(players);
 			keep_name();
 			rename_lobby_entry(false);
+			refresh_name_tags();
 			keep_platform();
 
 			std::lock_guard lock(g_shared.mutex);

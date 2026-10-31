@@ -294,14 +294,28 @@ namespace big::mission
 			disarm(door->GetAttachedTrap());
 	}
 
+	// A bomb is defused the way the multitool finishes one, as if the player had cut its wires. The bomb class itself
+	// implements the multitool's interface, so the interface's function runs on it.
+	static void defuse(SDK::ABombActor* bomb, SDK::AReadyOrNotCharacter* player)
+	{
+		static auto finished = SDK::ICanUseMultitoolOn::StaticClass()->GetFunction("CanUseMultitoolOn", "Server_FinishedUsingMultitool");
+		if (!finished)
+			return;
+
+		SDK::Params::CanUseMultitoolOn_Server_FinishedUsingMultitool parms{player};
+		bomb->ProcessEvent(finished, &parms);
+	}
+
 	int disarm_traps()
 	{
 		auto world = SDK::UWorld::GetWorld();
+		auto player = unreal_engine::get_character();
 		if (!world)
 			return 0;
 
-		// Door traps and tripwires alike, in every loaded level.
+		// Door traps, tripwires and bombs alike, in every loaded level.
 		std::vector<SDK::ATrapActor*> traps;
+		std::vector<SDK::ABombActor*> bombs;
 		for (auto level : world->Levels)
 		{
 			if (!level)
@@ -309,18 +323,29 @@ namespace big::mission
 
 			for (auto actor : level->Actors)
 			{
-				if (!unreal_engine::is_valid_actor(actor) || !actor->IsA(SDK::ATrapActor::StaticClass()))
+				if (!unreal_engine::is_valid_actor(actor))
 					continue;
 
-				auto trap = static_cast<SDK::ATrapActor*>(actor);
-				if (trap->TrapStatus == SDK::ETrapState::TS_Live)
-					traps.push_back(trap);
+				if (actor->IsA(SDK::ATrapActor::StaticClass()))
+				{
+					auto trap = static_cast<SDK::ATrapActor*>(actor);
+					if (trap->TrapStatus == SDK::ETrapState::TS_Live)
+						traps.push_back(trap);
+				}
+				else if (actor->IsA(SDK::ABombActor::StaticClass()) && player)
+				{
+					auto bomb = static_cast<SDK::ABombActor*>(actor);
+					if (bomb->BombState == SDK::EBombState::BS_Active)
+						bombs.push_back(bomb);
+				}
 			}
 		}
 
 		for (auto trap : traps)
 			disarm(trap);
-		return static_cast<int>(traps.size());
+		for (auto bomb : bombs)
+			defuse(bomb, player);
+		return static_cast<int>(traps.size() + bombs.size());
 	}
 
 	int remove_wedges()
@@ -455,7 +480,7 @@ namespace big
 	static mission_action _knockout_suspects("knockout_suspects", "Knock Out Suspects", "Every suspect still fighting is knocked out for 30 seconds (host only)", "{} knocked out.", mission::knockout_suspects);
 	static mission_action _unlock_doors("unlock_doors", "Unlock All Doors", "Every locked door opens for you and your squad (host only)", "{} doors unlocked.", mission::unlock_doors);
 	static mission_action _open_doors("open_doors", "Open All Doors", "Swings every closed door open, unlocking locked ones; trapped ones stay shut (host only)", "{} doors opened.", mission::open_doors);
-	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire (host only)", "{} traps disarmed.", mission::disarm_traps);
+	static mission_action _disarm_traps("disarm_traps", "Disarm All Traps", "Disarms every live door trap and tripwire, and defuses every bomb (host only)", "{} traps disarmed.", mission::disarm_traps);
 	static mission_action _remove_wedges("remove_wedges", "Remove Door Wedges", "Pulls every door wedge (host only)", "{} wedges removed.", mission::remove_wedges);
 	static mission_action _teleport_next_ai("teleport_next_ai", "Teleport to Next AI", "Moves you to the closest suspect still fighting, or civilian still to secure (host only)", "Teleported.", [] {
 		return mission::teleport_to_next_ai(unreal_engine::get_character()) ? 1 : 0;
@@ -486,7 +511,7 @@ namespace big
 				while (std::chrono::steady_clock::now() - started < 3s && mission::cuffing())
 					co_await this_task::wait();
 
-				count += mission::collect_evidence() + mission::report_all() + mission::max_score();
+				count += mission::disarm_traps() + mission::collect_evidence() + mission::report_all() + mission::max_score();
 				if (count > 0)
 					notification::success(get_label(), std::format("{} actions done.", count));
 				else
@@ -495,7 +520,7 @@ namespace big
 		}
 	};
 
-	static auto_win _auto_win("auto_win", "Auto Win", "Arrests everyone, collects all evidence, reports everything, and gives the full score with no penalties (host only)", 0);
+	static auto_win _auto_win("auto_win", "Auto Win", "Arrests everyone, defuses every trap and bomb, collects all evidence, reports everything, and gives the full score with no penalties (host only)", 0);
 
 	static bool has_given_penalty(const SDK::FScoreData& score)
 	{

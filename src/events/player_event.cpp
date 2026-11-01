@@ -1002,8 +1002,8 @@ namespace big
 				const auto forward = target->GetActorForwardVector();
 				location.X -= forward.X * 100.f;
 				location.Y -= forward.Y * 100.f;
-				player::set_player_coords(location, target->K2_GetActorRotation());
-				notification::success("Teleport", std::format("Teleported to {}.", name));
+				if (player::set_player_coords(location, target->K2_GetActorRotation()))
+					notification::success("Teleport", std::format("Teleported to {}.", name));
 				break;
 			}
 			case player_action::spectate:

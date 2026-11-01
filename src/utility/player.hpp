@@ -1,5 +1,6 @@
 #pragma once
 #include "unreal_engine_utility.hpp"
+#include "features/host_link.hpp"
 
 namespace big::player
 {
@@ -39,12 +40,22 @@ namespace big::player
 		return { 0, 0, 0 };
 	}
 
-	inline void set_player_coords(SDK::FVector const& location, SDK::FRotator const& rotator)
+	// Returns whether you were moved here. The game does nothing with this call from a client, so a client asks a host
+	// running this mod to make it on its pawn, and host_link says how that went.
+	inline bool set_player_coords(SDK::FVector const& location, SDK::FRotator const& rotator)
 	{
-		if (auto character = unreal_engine::get_character())
+		auto character = unreal_engine::get_character();
+		if (!character)
+			return false;
+
+		if (!character->HasAuthority())
 		{
-			character->Server_TeleportPlayerToLocation(location, SDK::FVector(rotator.Pitch, rotator.Yaw, rotator.Roll));
+			host_link::run("teleport", "Teleport", std::format("{:.1f},{:.1f},{:.1f},{:.1f},{:.1f},{:.1f}", location.X, location.Y, location.Z, rotator.Pitch, rotator.Yaw, rotator.Roll));
+			return false;
 		}
+
+		character->Server_TeleportPlayerToLocation(location, SDK::FVector(rotator.Pitch, rotator.Yaw, rotator.Roll));
+		return true;
 	}
 
 	inline float* get_fly_speed()

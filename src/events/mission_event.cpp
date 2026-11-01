@@ -647,8 +647,8 @@ namespace big
 		async_run([location] {
 			auto destination = location;
 			destination.Z += 100.f;
-			player::set_player_coords(destination, player::get_player_rotation());
-			notification::success("Teleport", "Teleported to the collectible.");
+			if (player::set_player_coords(destination, player::get_player_rotation()))
+				notification::success("Teleport", "Teleported to the collectible.");
 		});
 	}
 }

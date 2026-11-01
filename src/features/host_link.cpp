@@ -234,6 +234,22 @@ namespace big
 			character->CharacterMovement->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0);
 	}
 
+	// As the host: moves a client to x,y,z,pitch,yaw,roll from player::set_player_coords, which as a client cannot. Moved
+	// on the host alone, the pawn went back within half a second, the client's own position winning (Walk Speed had the
+	// host take it); ClientSetLocation moves it on the client too, where it stays.
+	static host_link::client_action _teleport_for_clients("teleport", "Teleport", [](SDK::APlayerCharacter* character, const std::string& args) {
+		double x, y, z, pitch, yaw, roll;
+		if (!character || std::sscanf(args.c_str(), "%lf,%lf,%lf,%lf,%lf,%lf", &x, &y, &z, &pitch, &yaw, &roll) != 6)
+			return false;
+
+		const SDK::FRotator facing(pitch, yaw, roll);
+		if (!character->K2_TeleportTo(SDK::FVector(x, y, z), facing))
+			return false;
+		if (auto controller = character->Controller)
+			controller->ClientSetLocation(character->K2_GetActorLocation(), facing);
+		return true;
+	});
+
 	std::optional<float> host_link::client_value(SDK::AActor* character, joaat_t toggle)
 	{
 		if (!character)

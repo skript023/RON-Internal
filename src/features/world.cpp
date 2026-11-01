@@ -109,6 +109,41 @@ namespace big
 
 	static freeze_ai _freeze_ai("freeze_ai", "Freeze AI", "Suspects and civilians stop moving (host only)");
 
+	// Civilians take no damage: the god mode flag your own Godmode sets, on each of them. The host decides damage, so only
+	// the host sets it.
+	class civilian_godmode : public looped_command
+	{
+		using looped_command::looped_command;
+
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_protected;
+
+		void on_tick() override
+		{
+			if (!ron::is_host())
+				return;
+
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->bGodMode || !ai->IsA(SDK::ACivilianCharacter::StaticClass()))
+					return;
+
+				ai->bGodMode = 1;
+				track(m_protected, ai);
+			});
+		}
+
+		void on_disable() override
+		{
+			for (const auto& entry : m_protected)
+			{
+				if (auto ai = entry.get())
+					ai->bGodMode = 0;
+			}
+			m_protected.clear();
+		}
+	};
+
+	static civilian_godmode _civilian_godmode("civilian_godmode", "Civilian Godmode", "Civilians take no damage (host only)");
+
 	// Suspects pick their targets without looking at the no-target flag, so the host takes everyone flagged out of each
 	// suspect's known enemies and the targets it tracks, every tick.
 	static void forget_flagged()

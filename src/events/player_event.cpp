@@ -930,22 +930,20 @@ namespace big
 			notification::success("Mute", std::format("{} {}.", name, muted ? "muted" : "unmuted"));
 		}
 
+		// The game's own admin kick, made on your controller as the host; KickPlayer on the game mode kicked no one. It
+		// answers nothing, so the notification only says it was asked.
 		void kick(SDK::APlayerState* state, const std::string& name)
 		{
-			auto world = SDK::UWorld::GetWorld();
-			auto mode = world ? world->AuthorityGameMode : nullptr;
-			auto owner = state->Owner;
-			if (!mode || !mode->IsA(SDK::AReadyOrNotGameMode::StaticClass()) || !owner || !owner->IsA(SDK::APlayerController::StaticClass()))
+			auto controller = ron::controller();
+			if (!controller)
 			{
-				notification::warning("Kick", std::format("Could not find {}'s connection.", name));
+				notification::warning("Kick", "Could not find your controller.");
 				return;
 			}
 
 			const auto reason = SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(L"Kicked by the host"));
-			if (static_cast<SDK::AReadyOrNotGameMode*>(mode)->KickPlayer(static_cast<SDK::APlayerController*>(owner), reason))
-				notification::success("Kick", std::format("{} was kicked.", name));
-			else
-				notification::warning("Kick", std::format("The game refused to kick {}.", name));
+			controller->Server_AdminKickPlayer(state, reason);
+			notification::info("Kick", std::format("Asked the game to kick {}.", name));
 		}
 
 		void spectate(SDK::APlayerCharacter* target)

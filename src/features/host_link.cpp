@@ -7,16 +7,19 @@
 #include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
+#include "SDK/Engine_parameters.hpp"
 
 
 namespace big
 {
-	// A client running this mod reaches the host's copy of it over the game's own chat RPCs: Server_SendChatMessage goes
-	// from the client's controller to the host, and Client_SendChatMessage answers that one client. A message starting
-	// with this tag is taken off before it reaches the chat; a host without the mod shows it as a chat line.
+	// A client running this mod reaches the host's copy of it over the engine's ServerExecRPC, which a shipping build
+	// without the mod drops unseen, also once the host unloads it; Client_SendChatMessage answers that one client, and a
+	// message starting with this tag is taken off before it reaches the chat. Tagged chat lines from an older client,
+	// which asked over Server_SendChatMessage, are still taken.
 	//
 	// Requests are run:<name>[:<args>] for a mission action or client action, and set:<name>:<value> for a toggle, with
-	// 0 for off. Answers are pong or refused for ping, and ok:, failed:, refused: or unknown: before the request.
+	// 0 for off. Answers are pong or refused for ping, and ok:, failed:, refused: or unknown: before the request. The host
+	// also sends pong or refused by itself to every client that asked once Accept Client Requests changes.
 	static constexpr std::wstring_view host_link_tag = L"\x1F" L"astra:";
 
 	static bool_command _accept_client_requests("accept_client_requests", "Accept Client Requests", "Clients running this mod may ask you, the host, to run features for them", false);
@@ -83,14 +86,23 @@ namespace big
 		client_actions().push_back({joaat(name), label, run});
 	}
 
-	// As a client: the controller the host answered. A map change gives a new one, which asks the host again by itself
-	// while g_linked is set; hosting or playing alone, such as on the main menu, clears it, so another lobby is not asked
-	// without Check Host Mod.
+	// As a client: the controller the host answered. Each new one, on joining a lobby or a map change, asks the host by
+	// itself; g_linked keeps the forwarded toggles on meanwhile, and goes once the host refuses or never answers.
 	static weak_object<SDK::APlayerController> g_answered;
 	static bool g_linked = false;
 	static weak_object<SDK::APlayerController> g_asked;
 	static int g_asks = 0;
 	static std::chrono::steady_clock::time_point g_asked_at{};
+	// As a client: Check Host Mod was pressed, so its answer is shown even when nothing changed.
+	static bool g_checked = false;
+	// As the host: every client that asked, so it runs this mod, and Accept Client Requests as they last heard it.
+	static std::vector<weak_object<SDK::AReadyOrNotPlayerController>> g_modded;
+	static bool g_accepting = false;
+	// As the host: the start of a long request each client is still sending in pieces.
+	static std::vector<std::pair<weak_object<SDK::AReadyOrNotPlayerController>, std::string>> g_pieces;
+	// As a client: since when a request has had no answer, so a host that stopped answering, such as one that unloaded
+	// the mod, is let go.
+	static std::optional<std::chrono::steady_clock::time_point> g_waiting;
 	// As a client: the value each toggle was last sent with.
 	static std::unordered_map<joaat_t, float> g_sent;
 
@@ -145,19 +157,24 @@ namespace big
 		return command ? command->get_label() : name;
 	}
 
+	// The engine drops a client sending ServerExecRPC more than 128 characters, so a longer request, such as Give Item's
+	// class and attachment paths, goes in pieces: each but the last starts with more:, and the host joins them, in order
+	// since the RPC is reliable.
 	static void send(SDK::AReadyOrNotPlayerController* controller, const std::string& request)
 	{
-		// Filled like a chat line of yours, in case a host without the mod checks it.
-		const std::wstring text = std::wstring(host_link_tag) + widen(request);
-		SDK::FRChatMessage message{};
-		message.Message = SDK::FString(text.c_str());
-		if (auto state = controller->PlayerState)
+		constexpr std::size_t piece = 100;
+		for (std::size_t at = 0;; at += piece)
 		{
-			message.SenderName = state->PlayerNamePrivate;
-			if (state->IsA(SDK::AReadyOrNotPlayerState::StaticClass()))
-				message.SenderPlayerState = static_cast<SDK::AReadyOrNotPlayerState*>(state);
+			const bool last = at + piece >= request.size();
+			const std::wstring text = std::wstring(host_link_tag) + (last ? L"" : L"more:") + widen(request.substr(at, piece));
+			controller->ServerExecRPC(SDK::FString(text.c_str()));
+			if (last)
+				break;
 		}
-		controller->Server_SendChatMessage(message);
+
+		// Ping goes unanswered by a host without the mod; anything else is sent only to a host that answered one.
+		if (request != "ping" && !g_waiting)
+			g_waiting = std::chrono::steady_clock::now();
 	}
 
 	static void answer(SDK::AReadyOrNotPlayerController* controller, const std::string& text)
@@ -166,6 +183,14 @@ namespace big
 		SDK::FRChatMessage reply{};
 		reply.Message = SDK::FString(wide.c_str());
 		controller->Client_SendChatMessage(reply);
+	}
+
+	// As the host: answers a client that asked, and remembers it for when Accept Client Requests changes.
+	static void answer_ping(SDK::AReadyOrNotPlayerController* sender)
+	{
+		if (std::ranges::none_of(g_modded, [&](const auto& modded) { return modded.get() == sender; }))
+			g_modded.push_back(sender);
+		answer(sender, _accept_client_requests.get_state() ? "pong" : "refused");
 	}
 
 	bool host_link::ready()
@@ -228,9 +253,18 @@ namespace big
 		{
 			g_linked = false;
 
+			// Clients that asked hear of the change at once, so they need not ask again.
+			std::erase_if(g_modded, [](const auto& modded) { return !modded.get(); });
+			if (const bool accepting = _accept_client_requests.get_state(); accepting != g_accepting)
+			{
+				g_accepting = accepting;
+				for (const auto& modded : g_modded)
+					answer(modded.get(), accepting ? "pong" : "refused");
+			}
+
 			// Turning Accept Client Requests off takes back what clients have on, since their requests to turn it off
 			// would be refused from then on.
-			if (!_accept_client_requests.get_state())
+			if (!g_accepting)
 			{
 				for (const auto& setting : g_client_settings)
 				{
@@ -262,9 +296,10 @@ namespace big
 		if (!ready() || !controller)
 		{
 			g_sent.clear();
+			g_waiting.reset();
 
 			// A new controller may not reach the host at once, so it asks up to three times, five seconds apart.
-			if (g_linked && controller)
+			if (controller)
 			{
 				const auto now = std::chrono::steady_clock::now();
 				if (g_asked.get() != controller)
@@ -278,7 +313,21 @@ namespace big
 					++g_asks;
 					send(controller, "ping");
 				}
+				// Not one answer: this host does not run the mod, so the toggles stop waiting for it.
+				else if (g_asks == 3 && now - g_asked_at > std::chrono::seconds(5))
+				{
+					g_linked = false;
+				}
 			}
+			return;
+		}
+
+		// From here on the host is treated as one without the mod, until it answers a ping again.
+		if (g_waiting && std::chrono::steady_clock::now() - *g_waiting > std::chrono::seconds(5))
+		{
+			g_answered = {};
+			g_linked = false;
+			notification::warning("Check Host Mod", "The host stopped answering, so it may have unloaded the mod; nothing more is sent to it.");
 			return;
 		}
 
@@ -325,8 +374,9 @@ namespace big
 
 			if (auto controller = ron::controller())
 			{
+				g_checked = true;
 				send(controller, "ping");
-				notification::info(get_label(), "Asked the host. A host without this mod shows the question in chat.");
+				notification::info(get_label(), "Asked the host. No answer means it does not run this mod.");
 			}
 		}
 	};
@@ -414,7 +464,32 @@ namespace big
 		return reply::unknown;
 	}
 
-	// A client's own call passes through here on its way out, so only the host acts on it.
+	// As the host: answers what a client asked.
+	static void handle(SDK::AReadyOrNotPlayerController* sender, const std::string& request)
+	{
+		if (request == "ping")
+		{
+			answer_ping(sender);
+			return;
+		}
+
+		if (!_accept_client_requests.get_state())
+		{
+			answer(sender, "refused:" + request);
+			return;
+		}
+
+		const auto who = sender->PlayerState ? sender->PlayerState->PlayerNamePrivate.ToString() : std::string("A client");
+		switch (run_request(sender, request, who))
+		{
+		case reply::ok: answer(sender, "ok:" + request); break;
+		case reply::failed: answer(sender, "failed:" + request); break;
+		case reply::unknown: answer(sender, "unknown:" + request); break;
+		}
+	}
+
+	// An older client still asks over chat. A client's own call passes through here on its way out, so only the host acts
+	// on it.
 	class host_link_request : public process_event
 	{
 		using process_event::process_event;
@@ -423,41 +498,57 @@ namespace big
 		{
 			const auto& message = static_cast<SDK::Params::ReadyOrNotPlayerController_Server_SendChatMessage*>(parms)->ChatMessage;
 			const auto text = message.Message.ToWString();
-			const bool local = _this == unreal_engine::get_player_controller();
 			if (!text.starts_with(host_link_tag) || !ron::is_host())
 				return eExecutionStatus::EXECUTION_CONTINUE;
 
 			// Taken off the chat whether it is answered or not.
-			if (local)
-				return eExecutionStatus::EXECUTION_INTERCEPTED;
-
-			auto sender = static_cast<SDK::AReadyOrNotPlayerController*>(_this);
-			const auto request = narrow(std::wstring_view(text).substr(host_link_tag.size()));
-			const bool accept = _accept_client_requests.get_state();
-			if (request == "ping")
-			{
-				answer(sender, accept ? "pong" : "refused");
-				return eExecutionStatus::EXECUTION_INTERCEPTED;
-			}
-
-			if (!accept)
-			{
-				answer(sender, "refused:" + request);
-				return eExecutionStatus::EXECUTION_INTERCEPTED;
-			}
-
-			const auto who = sender->PlayerState ? sender->PlayerState->PlayerNamePrivate.ToString() : std::string("A client");
-			switch (run_request(sender, request, who))
-			{
-			case reply::ok: answer(sender, "ok:" + request); break;
-			case reply::failed: answer(sender, "failed:" + request); break;
-			case reply::unknown: answer(sender, "unknown:" + request); break;
-			}
+			if (_this != unreal_engine::get_player_controller())
+				handle(static_cast<SDK::AReadyOrNotPlayerController*>(_this), narrow(std::wstring_view(text).substr(host_link_tag.size())));
 			return eExecutionStatus::EXECUTION_INTERCEPTED;
 		}
 	};
 
 	static host_link_request _host_link_request("Function ReadyOrNot.ReadyOrNotPlayerController.Server_SendChatMessage");
+
+	// A client's request on its way in, as the host; on the client this is its own call on its way out.
+	class host_link_exec_request : public process_event
+	{
+		using process_event::process_event;
+
+		eExecutionStatus on_call(SDK::UObject* _this, SDK::UFunction* function, void* parms) override
+		{
+			const auto text = static_cast<SDK::Params::PlayerController_ServerExecRPC*>(parms)->Msg.ToWString();
+			if (!text.starts_with(host_link_tag) || !ron::is_host() || _this == unreal_engine::get_player_controller() ||
+			    !_this->IsA(SDK::AReadyOrNotPlayerController::StaticClass()))
+				return eExecutionStatus::EXECUTION_CONTINUE;
+
+			auto sender = static_cast<SDK::AReadyOrNotPlayerController*>(_this);
+			auto request = narrow(std::wstring_view(text).substr(host_link_tag.size()));
+			std::erase_if(g_pieces, [](const auto& entry) { return !entry.first.get(); });
+			auto it = std::ranges::find_if(g_pieces, [&](const auto& entry) { return entry.first.get() == sender; });
+			if (request.starts_with("more:"))
+			{
+				if (it == g_pieces.end())
+					g_pieces.push_back({sender, request.substr(5)});
+				// Far longer than any request, so a client that never ends one is let go.
+				else if (it->second.size() > 4096)
+					g_pieces.erase(it);
+				else
+					it->second += request.substr(5);
+				return eExecutionStatus::EXECUTION_INTERCEPTED;
+			}
+
+			if (it != g_pieces.end())
+			{
+				request = it->second + request;
+				g_pieces.erase(it);
+			}
+			handle(sender, request);
+			return eExecutionStatus::EXECUTION_INTERCEPTED;
+		}
+	};
+
+	static host_link_exec_request _host_link_exec_request("Function Engine.PlayerController.ServerExecRPC");
 
 	// The host's answer. On the host this is the call on its way out to a client, so only this game's own controller
 	// takes it.
@@ -475,17 +566,25 @@ namespace big
 
 			const auto reply = narrow(std::wstring_view(text).substr(host_link_tag.size()));
 			const auto label = label_of(name_in(reply));
+			g_waiting.reset();
+			// Shown when the link comes or goes, or for Check Host Mod; a map change asking again stays quiet.
 			if (reply == "pong")
 			{
+				if (!g_linked || g_checked)
+					notification::success("Check Host Mod", "The host runs this mod and accepts requests.");
 				g_answered = static_cast<SDK::APlayerController*>(_this);
 				g_linked = true;
-				notification::success("Check Host Mod", "The host runs this mod and accepts requests.");
+				g_checked = false;
 			}
 			else if (reply == "refused")
 			{
+				if (g_linked || g_checked)
+					notification::warning("Check Host Mod", "The host runs this mod but has Accept Client Requests off.");
 				g_answered = {};
 				g_linked = false;
-				notification::warning("Check Host Mod", "The host runs this mod but has Accept Client Requests off.");
+				g_checked = false;
+				// The host says so by itself once it turns them on.
+				g_asks = 3;
 			}
 			else if (reply.starts_with("ok:run:"))
 			{

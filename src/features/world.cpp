@@ -144,6 +144,66 @@ namespace big
 
 	static civilian_godmode _civilian_godmode("civilian_godmode", "Civilian Godmode", "Civilians take no damage (host only)");
 
+	// Each active bomb keeps the time it had left when it was first seen with this on. The host counts the bombs down, so
+	// only the host holds them; the bombs are looked for once a second, as they are found by walking every level.
+	class freeze_bombs : public looped_command
+	{
+		using looped_command::looped_command;
+
+		std::vector<std::pair<weak_object<SDK::ABombActor>, float>> m_held;
+		std::chrono::steady_clock::time_point m_next_scan{};
+
+		void scan()
+		{
+			auto world = SDK::UWorld::GetWorld();
+			if (!world)
+				return;
+
+			std::erase_if(m_held, [](const auto& held) { return !held.first; });
+			for (auto level : world->Levels)
+			{
+				if (!level)
+					continue;
+
+				for (auto actor : level->Actors)
+				{
+					if (!unreal_engine::is_valid_actor(actor) || !actor->IsA(SDK::ABombActor::StaticClass()))
+						continue;
+
+					auto bomb = static_cast<SDK::ABombActor*>(actor);
+					if (std::ranges::none_of(m_held, [bomb](const auto& held) { return held.first.get() == bomb; }))
+						m_held.emplace_back(bomb, bomb->TimeUntilExplodes);
+				}
+			}
+		}
+
+		void on_tick() override
+		{
+			if (!ron::is_host())
+				return;
+
+			if (const auto now = std::chrono::steady_clock::now(); now >= m_next_scan)
+			{
+				scan();
+				m_next_scan = now + 1s;
+			}
+
+			for (const auto& [entry, time] : m_held)
+			{
+				if (auto bomb = entry.get(); bomb && bomb->BombState == SDK::EBombState::BS_Active)
+					bomb->TimeUntilExplodes = time;
+			}
+		}
+
+		void on_disable() override
+		{
+			m_held.clear();
+			m_next_scan = {};
+		}
+	};
+
+	static freeze_bombs _freeze_bombs("freeze_bombs", "Freeze Bomb Timers", "Every bomb's timer stops where it is (host only)");
+
 	// Suspects pick their targets without looking at the no-target flag, so the host takes everyone flagged out of each
 	// suspect's known enemies and the targets it tracks, every tick.
 	static void forget_flagged()

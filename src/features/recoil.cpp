@@ -127,6 +127,24 @@ namespace big
 			wep->RecoilPattern[i] = {};
 	}
 
+	// The camera's jolt with each shot. Clearing FireCameraShake did not stop it, so it is ended on the next tick, as
+	// No Stun ends the stun shakes.
+	static void stop_fire_shake(SDK::ABaseMagazineWeapon* wep)
+	{
+		auto controller = unreal_engine::get_player_controller();
+		auto camera = controller ? controller->PlayerCameraManager : nullptr;
+		if (!camera)
+			return;
+
+		if (auto shake = wep->FireCameraShake.Get())
+			camera->StopAllInstancesOfCameraShake(shake, true);
+		if (wep->IsA(SDK::ATaser::StaticClass()))
+		{
+			if (auto shake = static_cast<SDK::ATaser*>(wep)->TaserFireLoopCameraShake.Get())
+				camera->StopAllInstancesOfCameraShake(shake, true);
+		}
+	}
+
 	static void restore_all()
 	{
 		for (auto& [weapon, data] : g_backup)
@@ -191,6 +209,7 @@ namespace big
 					// A weapon switched to while the feature is on is backed up before it changes too.
 					backup_weapon(wep);
 					apply_no_recoil(wep);
+					stop_fire_shake(wep);
 				}
 			}
 		}
@@ -201,5 +220,5 @@ namespace big
 		}
 	};
 
-	static no_recoil _no_recoil("no_recoil", "No Recoil", "Removes recoil and weapon sway");
+	static no_recoil _no_recoil("no_recoil", "No Recoil", "Removes recoil, weapon sway and the camera's jolt with each shot");
 }

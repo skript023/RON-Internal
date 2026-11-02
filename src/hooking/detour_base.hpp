@@ -5,13 +5,13 @@ namespace big
 	class detour_base
 	{
 	private:
-
 	protected:
-		const std::string_view m_name;
+		const std::string m_name;
 		bool m_enabled;
+
 	public:
 		detour_base(const std::string_view name);
-		virtual ~detour_base() = default;
+		virtual ~detour_base();
 		detour_base(const detour_base&) = delete;
 		detour_base(detour_base&&) noexcept = delete;
 		detour_base& operator=(const detour_base&) = delete;
@@ -53,13 +53,17 @@ namespace big
 
 	private:
 		inline static std::vector<detour_base*> m_detour_bases;
-
+		void (*m_clear_binding)(detour_base*){};
 	};
 
 	template<auto detour_function>
 	inline void detour_base::add(detour_base* hook)
 	{
 		detour_helper<detour_function>::m_hook = hook;
+		hook->m_clear_binding = [](detour_base* value) {
+			if (detour_helper<detour_function>::m_hook == value)
+				detour_helper<detour_function>::m_hook = nullptr;
+		};
 	}
 
 	template<auto detour_function, typename T>

@@ -1,8 +1,14 @@
 #include "menu_settings.hpp"
+#include "file_manager.hpp"
 #include "nlohmann/json.hpp"
 
 namespace big
 {
+    std::filesystem::path menu_settings::get_file_path()
+    {
+        return g_file_manager.get_project_file("./menu_settings.json").get_path();
+    }
+
     void menu_settings::attempt_save()
     {
         nlohmann::json j = *this;
@@ -15,8 +21,7 @@ namespace big
     {
         this->default_options = *this;
 
-        std::string settings_file = std::getenv("appdata");
-        settings_file += this->settings_location;
+        const auto settings_file = get_file_path();
 
         std::ifstream file(settings_file);
 
@@ -89,10 +94,7 @@ namespace big
     }
     bool menu_settings::save()
     {
-        std::string settings_file = std::getenv("appdata");
-        settings_file += this->settings_location;
-
-        std::ofstream file(settings_file, std::ios::out | std::ios::trunc);
+        std::ofstream file(get_file_path(), std::ios::out | std::ios::trunc);
         nlohmann::json j = *this;
         file << j.dump(4);
         file.close();
@@ -101,10 +103,7 @@ namespace big
     }
     bool menu_settings::write_default_config()
     {
-        std::string settings_file = std::getenv("appdata");
-        settings_file += this->settings_location;
-
-        std::ofstream file(settings_file, std::ios::out);
+        std::ofstream file(get_file_path(), std::ios::out);
         nlohmann::json j = *this;
         file << j.dump(4);
         file.close();

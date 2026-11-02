@@ -12,7 +12,7 @@ namespace big
 		auto data = reinterpret_cast<const char*>(stack_trace.data());
 		std::size_t size = stack_trace.size() * sizeof(uint64_t);
 
-		return std::hash<std::string_view>()({ data, size });
+		return std::hash<std::string_view>()({data, size});
 	}
 
 	exception_handler::exception_handler()
@@ -116,4 +116,6 @@ namespace big
 
 		return EXCEPTION_CONTINUE_EXECUTION;
 	}
+
+	exception_handler _exception_handler{};
 }

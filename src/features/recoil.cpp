@@ -8,7 +8,7 @@
 #include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weapon_backup.hpp"
 
 namespace big
 {
@@ -39,18 +39,28 @@ namespace big
 
 		bool bCalculateProcRecoil;
 		bool bUseFireLoopAnims;
+
+		std::vector<SDK::FRotator> RecoilPattern;
 	};
 
-	static std::unordered_map<SDK::ABaseMagazineWeapon*, recoil_backup> g_backup;
+	static weapon_backup<recoil_backup> g_backup;
+
+	static std::vector<SDK::FRotator> pattern_of(SDK::ABaseMagazineWeapon* wep)
+	{
+		std::vector<SDK::FRotator> pattern;
+		for (int i = 0; i < wep->RecoilPattern.Num(); ++i)
+			pattern.push_back(wep->RecoilPattern[i]);
+		return pattern;
+	}
 
 	static void backup_weapon(SDK::ABaseMagazineWeapon* wep)
 	{
 		if (!wep) return;
 
 		// kalau belum pernah dibackup
-		if (g_backup.find(wep) == g_backup.end())
+		if (!g_backup.contains(wep))
 		{
-			g_backup[wep] = {
+			g_backup.add(wep, {
 				wep->RecoilMultiplierPitch,
 				wep->RecoilMultiplierYaw,
 				wep->FirstShotRecoil,
@@ -75,8 +85,10 @@ namespace big
 				wep->RecoilDampStrength,
 
 				wep->bCalculateProcRecoil,
-				wep->bUseFireLoopAnims
-			};
+				wep->bUseFireLoopAnims,
+
+				pattern_of(wep)
+			});
 		}
 	}
 
@@ -109,12 +121,17 @@ namespace big
 
 		wep->bCalculateProcRecoil = false;
 		wep->bUseFireLoopAnims = false;
+
+		// The kick of each shot from the hip; aiming scales it by ADSRecoilMultiplier, so only hip fire still had it.
+		for (int i = 0; i < wep->RecoilPattern.Num(); ++i)
+			wep->RecoilPattern[i] = {};
 	}
 
 	static void restore_all()
 	{
-		for (auto& [wep, data] : g_backup)
+		for (auto& [weapon, data] : g_backup)
 		{
+			auto wep = weapon.get();
 			if (!wep) continue;
 
 			wep->RecoilMultiplierPitch = data.RecoilMultiplierPitch;
@@ -142,6 +159,9 @@ namespace big
 
 			wep->bCalculateProcRecoil = data.bCalculateProcRecoil;
 			wep->bUseFireLoopAnims = data.bUseFireLoopAnims;
+
+			for (int i = 0; i < wep->RecoilPattern.Num() && i < static_cast<int>(data.RecoilPattern.size()); ++i)
+				wep->RecoilPattern[i] = data.RecoilPattern[i];
 		}
 
 		g_backup.clear();
@@ -168,6 +188,8 @@ namespace big
 			{
 				if (auto wep = c->GetEquippedWeapon())
 				{
+					// A weapon switched to while the feature is on is backed up before it changes too.
+					backup_weapon(wep);
 					apply_no_recoil(wep);
 				}
 			}
@@ -179,5 +201,5 @@ namespace big
 		}
 	};
 
-	static no_recoil _no_recoil("no_recoil", "No Recoil", "");
+	static no_recoil _no_recoil("no_recoil", "No Recoil", "Removes recoil and weapon sway");
 }

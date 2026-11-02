@@ -1,6 +1,6 @@
 #pragma once
 #include "utility/joaat.hpp"
-#include "settings/state_serializer.hpp"
+#include <astra/host/state_serializer.hpp>
 
 namespace big
 {
@@ -61,6 +61,12 @@ namespace big
 			return get_instance().get_process_event_impl(hash);
 		}
 
+		// Unlike get_command<bool_command>, returns nullptr when the name is not a toggle.
+		static bool_command* get_bool_command(joaat_t hash)
+		{
+			return get_instance().get_bool_command_impl(hash);
+		}
+
 		static std::unordered_map<joaat_t, command*> get_command()
 		{
 			return get_instance().m_commands;
@@ -89,9 +95,11 @@ namespace big
 		void enable_bool_commands_impl();
 		void run_looped_commands_impl();
 		command* get_command_impl(joaat_t hash);
+		bool_command* get_bool_command_impl(joaat_t hash);
 		process_event* get_process_event_impl(joaat_t hash);
 		virtual void save_state_impl(nlohmann::json& state) override;
 		virtual void load_state_impl(nlohmann::json& state) override;
+		virtual void apply_external_impl(nlohmann::json& state, const nlohmann::json& changes) override;
 		void shutdown_impl();
 
 		static commands& get_instance()

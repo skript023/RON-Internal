@@ -1,0 +1,380 @@
+#include "script.hpp"
+#include "commands/command.hpp"
+#include "commands/float_command.hpp"
+#include "commands/looped_command.hpp"
+#include "utility/ron.hpp"
+#include "host_link.hpp"
+#include "SDK/ReadyOrNot_classes.hpp"
+#include "SDK/ReadyOrNot_parameters.hpp"
+
+namespace big
+{
+	using debug_subsystem = SDK::UReadyOrNotDebugSubsystem;
+
+	// A switch the game's own debug subsystem keeps. It calls the game's toggle, and writes the flag directly when the
+	// toggle did nothing, such as when a shipping build left its body out. Re-applied every tick, so a new mission
+	// keeps it.
+	class debug_toggle : public looped_command
+	{
+	public:
+		using getter_t = bool (*)(debug_subsystem*);
+		using setter_t = void (*)(debug_subsystem*, bool);
+		using toggler_t = void (*)(debug_subsystem*);
+
+		debug_toggle(std::string name, std::string label, std::string description, getter_t get, setter_t set, toggler_t toggle) :
+		    looped_command(std::move(name), std::move(label), std::move(description)),
+		    m_get(get),
+		    m_set(set),
+		    m_toggle(toggle)
+		{
+		}
+
+	protected:
+		void on_tick() override
+		{
+			if (auto subsystem = ron::debug_subsystem(); subsystem && !m_get(subsystem))
+				apply(subsystem, true);
+		}
+
+		void on_disable() override
+		{
+			if (auto subsystem = ron::debug_subsystem(); subsystem && m_get(subsystem))
+				apply(subsystem, false);
+		}
+
+	private:
+		void apply(debug_subsystem* subsystem, bool on)
+		{
+			m_toggle(subsystem);
+			if (m_get(subsystem) != on)
+				m_set(subsystem, on);
+		}
+
+		getter_t m_get;
+		setter_t m_set;
+		toggler_t m_toggle;
+	};
+
+	// The debug subsystem's AI movement and AI targeting switches did nothing in the shipping game, so these two work on
+	// the characters themselves.
+
+	// Each AI a feature changed, listed once however often the game undoes the change, so turning it off puts each one
+	// back. Anyone the engine freed since, such as on a level change, is dropped.
+	static void track(std::vector<weak_object<SDK::ACyberneticCharacter>>& changed, SDK::ACyberneticCharacter* ai)
+	{
+		std::erase_if(changed, [](const auto& entry) { return !entry; });
+
+		const weak_object<SDK::ACyberneticCharacter> entry(ai);
+		if (std::ranges::find(changed, entry) == changed.end())
+			changed.push_back(entry);
+	}
+
+	// Suspects and civilians stop moving: movement off on each one, back to walking afterwards. AI moves on the host,
+	// so only the host freezes it; the squad keeps moving.
+	class freeze_ai : public looped_command
+	{
+		using looped_command::looped_command;
+
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_frozen;
+
+		void on_tick() override
+		{
+			if (!ron::is_host())
+				return;
+
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->IsA(SDK::ASWATCharacter::StaticClass()) || !ron::is_active(ai))
+					return;
+
+				auto movement = ai->CharacterMovement;
+				if (!movement || movement->MovementMode == SDK::EMovementMode::MOVE_None)
+					return;
+
+				movement->DisableMovement();
+				track(m_frozen, ai);
+			});
+		}
+
+		void on_disable() override
+		{
+			for (const auto& entry : m_frozen)
+			{
+				auto ai = entry.get();
+				if (ai && ron::is_active(ai) && ai->CharacterMovement && ai->CharacterMovement->MovementMode == SDK::EMovementMode::MOVE_None)
+					ai->CharacterMovement->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0);
+			}
+			m_frozen.clear();
+		}
+	};
+
+	static freeze_ai _freeze_ai("freeze_ai", "Freeze AI", "Suspects and civilians stop moving (host only)");
+
+	// Civilians take no damage: the god mode flag your own Godmode sets, on each of them. The host decides damage, so only
+	// the host sets it.
+	class civilian_godmode : public looped_command
+	{
+		using looped_command::looped_command;
+
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_protected;
+
+		void on_tick() override
+		{
+			if (!ron::is_host())
+				return;
+
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->bGodMode || !ai->IsA(SDK::ACivilianCharacter::StaticClass()))
+					return;
+
+				ai->bGodMode = 1;
+				track(m_protected, ai);
+			});
+		}
+
+		void on_disable() override
+		{
+			for (const auto& entry : m_protected)
+			{
+				if (auto ai = entry.get())
+					ai->bGodMode = 0;
+			}
+			m_protected.clear();
+		}
+	};
+
+	static civilian_godmode _civilian_godmode("civilian_godmode", "Civilian Godmode", "Civilians take no damage (host only)");
+
+	// Each active bomb keeps the time it had left when it was first seen with this on. The host counts the bombs down, so
+	// only the host holds them; the bombs are looked for once a second, as they are found by walking every level.
+	class freeze_bombs : public looped_command
+	{
+		using looped_command::looped_command;
+
+		std::vector<std::pair<weak_object<SDK::ABombActor>, float>> m_held;
+		std::chrono::steady_clock::time_point m_next_scan{};
+
+		void scan()
+		{
+			auto world = SDK::UWorld::GetWorld();
+			if (!world)
+				return;
+
+			std::erase_if(m_held, [](const auto& held) { return !held.first; });
+			for (auto level : world->Levels)
+			{
+				if (!level)
+					continue;
+
+				for (auto actor : level->Actors)
+				{
+					if (!unreal_engine::is_valid_actor(actor) || !actor->IsA(SDK::ABombActor::StaticClass()))
+						continue;
+
+					auto bomb = static_cast<SDK::ABombActor*>(actor);
+					if (std::ranges::none_of(m_held, [bomb](const auto& held) { return held.first.get() == bomb; }))
+						m_held.emplace_back(bomb, bomb->TimeUntilExplodes);
+				}
+			}
+		}
+
+		void on_tick() override
+		{
+			if (!ron::is_host())
+				return;
+
+			if (const auto now = std::chrono::steady_clock::now(); now >= m_next_scan)
+			{
+				scan();
+				m_next_scan = now + 1s;
+			}
+
+			for (const auto& [entry, time] : m_held)
+			{
+				if (auto bomb = entry.get(); bomb && bomb->BombState == SDK::EBombState::BS_Active)
+					bomb->TimeUntilExplodes = time;
+			}
+		}
+
+		void on_disable() override
+		{
+			m_held.clear();
+			m_next_scan = {};
+		}
+	};
+
+	static freeze_bombs _freeze_bombs("freeze_bombs", "Freeze Bomb Timers", "Every bomb's timer stops where it is (host only)");
+
+	// Suspects pick their targets without looking at the no-target flag, so the host takes everyone flagged out of each
+	// suspect's known enemies and the targets it tracks, every tick.
+	static void forget_flagged()
+	{
+		ron::for_each_ai([](SDK::ACyberneticCharacter* ai) {
+			auto controller = ai->IsA(SDK::ASuspectCharacter::StaticClass()) && ai->Controller && ai->Controller->IsA(SDK::ACyberneticController::StaticClass())
+			    ? static_cast<SDK::ACyberneticController*>(ai->Controller) : nullptr;
+			auto targeting = controller ? controller->TargetingComponent : nullptr;
+			if (!targeting)
+				return;
+
+			auto& enemies = targeting->KnownEnemies;
+			for (int i = enemies.Num() - 1; i >= 0; --i)
+			{
+				if (enemies[i] && enemies[i]->bNoTarget)
+					enemies.Remove(i);
+			}
+
+			for (auto target : {&targeting->TrackedTarget, &targeting->LastTrackedTarget, &targeting->LastKnownEnemy})
+			{
+				if (*target && (*target)->bNoTarget)
+					*target = nullptr;
+			}
+		});
+	}
+
+	// Suspects pick no target: the player's own no-target cheat, toggled the way god mode is, and the same flag on the
+	// squad, which the host then keeps out of the suspects' targets.
+	class ai_hold_fire : public looped_command
+	{
+		using looped_command::looped_command;
+
+		// The pawn this feature last toggled, so a respawned pawn is toggled again but the same one is not toggled twice.
+		weak_object<SDK::APlayerCharacter> m_toggled;
+		std::vector<weak_object<SDK::ACyberneticCharacter>> m_squad;
+
+		static void toggle(SDK::APlayerCharacter* c, SDK::APlayerController* controller)
+		{
+			if (controller->HasAuthority())
+				c->Server_ToggleNoTarget();
+			else
+				c->ToggleNoTarget();
+		}
+
+		void on_enable() override
+		{
+			m_toggled = {};
+			on_tick();
+		}
+
+		void on_tick() override
+		{
+			auto controller = unreal_engine::get_player_controller();
+			auto c = unreal_engine::get_character();
+			if (!c || !controller)
+				return;
+
+			if (!c->bNoTarget && m_toggled.get() != c)
+			{
+				toggle(c, controller);
+				m_toggled = c;
+			}
+
+			if (!controller->HasAuthority())
+				return;
+
+			c->bNoTarget = true;
+			ron::for_each_ai([&](SDK::ACyberneticCharacter* ai) {
+				if (ai->IsA(SDK::ASWATCharacter::StaticClass()) && !ai->bNoTarget)
+				{
+					ai->bNoTarget = true;
+					track(m_squad, ai);
+				}
+			});
+			forget_flagged();
+		}
+
+		void on_disable() override
+		{
+			auto controller = unreal_engine::get_player_controller();
+			auto c = unreal_engine::get_character();
+			m_toggled = {};
+
+			if (c && controller && c->bNoTarget)
+			{
+				toggle(c, controller);
+				if (c->bNoTarget && controller->HasAuthority())
+					c->bNoTarget = false;
+			}
+
+			for (const auto& member : m_squad)
+			{
+				if (auto ai = member.get())
+					ai->bNoTarget = false;
+			}
+			m_squad.clear();
+		}
+	};
+
+	static ai_hold_fire _ai_ignore("ai_ignore", "AI Hold Fire", "Suspects target neither you nor your squad");
+
+	// The host decides who the AI may target, so a client's pawn there is flagged and kept out of the suspects' targets.
+	static host_link::client_toggle _ai_ignore_for_clients("ai_ignore"_hash, [](SDK::APlayerCharacter* c, float) {
+		if (!c->bNoTarget)
+			c->bNoTarget = true;
+		forget_flagged();
+	}, [](SDK::APlayerCharacter* c) { c->bNoTarget = false; });
+
+	static debug_toggle _objective_markers("objective_markers", "Objective Markers", "The game's markers on every objective",
+	    [](debug_subsystem* s) -> bool { return s->bShowObjectiveMarkers; },
+	    [](debug_subsystem* s, bool on) { s->bShowObjectiveMarkers = on; },
+	    [](debug_subsystem* s) { s->ToggleObjectiveMarkers(); });
+
+	static debug_toggle _evidence_markers("evidence_markers", "Evidence Markers", "The game's markers on every piece of evidence",
+	    [](debug_subsystem* s) -> bool { return s->bShowAllEvidenceActors; },
+	    [](debug_subsystem* s, bool on) { s->bShowAllEvidenceActors = on; },
+	    [](debug_subsystem* s) { s->ToggleAllEvidenceActorMarkers(); });
+
+	static debug_toggle _infinite_swat_items("infinite_swat_items", "Infinite Squad Items", "Your AI squad never runs out of grenades or tools",
+	    [](debug_subsystem* s) -> bool { return s->bInfiniteSWATItems; },
+	    [](debug_subsystem* s, bool on) { s->bInfiniteSWATItems = on; },
+	    [](debug_subsystem* s) { s->ToggleInfiniteSWATItems(); });
+
+	static float_command _time_scale("time_scale", "Time Scale", "Game speed while Slow Motion is on", 0.1f, 1.f, 0.4f);
+
+	class slow_motion : public looped_command
+	{
+		using looped_command::looped_command;
+
+		// The world's time dilation replicates, so the host slows the lobby down; a client changing it would only
+		// desync itself.
+		static void set_dilation(float scale)
+		{
+			auto world = SDK::UWorld::GetWorld();
+			if (world && std::abs(SDK::UGameplayStatics::GetGlobalTimeDilation(world) - scale) > 0.001f)
+				SDK::UGameplayStatics::SetGlobalTimeDilation(world, scale);
+		}
+
+		void on_tick() override
+		{
+			if (ron::is_host())
+				set_dilation(std::clamp(_time_scale.get_state(), _time_scale.get_minimum(), _time_scale.get_maximum()));
+		}
+
+		void on_disable() override
+		{
+			if (ron::is_host())
+				set_dilation(1.f);
+		}
+	};
+
+	static slow_motion _slow_motion("slow_motion", "Slow Motion", "Slows the whole game down (host only)");
+
+	class reset_roster_stress : public command
+	{
+		using command::command;
+
+		void on_call() override
+		{
+			// Officers' stress belongs to the Commander roster; outside it the call changes nothing.
+			auto controller = ron::controller();
+			if (!controller || !SDK::UBpGameplayHelperLib::IsCommanderMode(controller))
+			{
+				notification::warning(get_label(), "Only works in Commander mode.");
+				return;
+			}
+
+			controller->SetRosterStressValue(0.f);
+			notification::success(get_label(), "Squad stress reset.");
+		}
+	};
+
+	static reset_roster_stress _reset_roster_stress("reset_roster_stress", "Reset Squad Stress", "Commander mode: brings every officer's stress back to zero");
+}

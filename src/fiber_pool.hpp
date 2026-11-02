@@ -1,23 +1,19 @@
 #pragma once
-#include "common.hpp"
-#include "class/recursive_mutex.hpp"
+#include "task.hpp"
+#include "task_mgr.hpp"
 
 namespace big
 {
 	class fiber_pool
 	{
 	public:
-		explicit fiber_pool(std::size_t num_fibers);
-		~fiber_pool();
-
-		void queue_job(std::function<void()> func);
-
-		void fiber_tick();
-		static void fiber_func();
-	private:
-		std::recursive_mutex m_mutex;
-		std::stack<std::function<void()>> m_jobs;
+		template<typename F>
+		void queue_job(F&& func)
+		{
+			async_run(std::forward<F>(func));
+		}
 	};
 
-	inline fiber_pool *g_fiber_pool{};
+	inline fiber_pool g_fiber_pool_instance;
+	inline fiber_pool* g_fiber_pool = &g_fiber_pool_instance;
 }

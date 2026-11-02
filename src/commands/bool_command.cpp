@@ -1,5 +1,5 @@
 #include "bool_command.hpp"
-#include "fiber_pool.hpp" // TODO: game import in core
+#include "task_mgr.hpp"
 #include "commands.hpp"
 
 namespace big
@@ -33,10 +33,18 @@ namespace big
 
 	void bool_command::set_state(bool state)
 	{
-		if (state && !m_state)
-			on_enable();
-		else if (!state && m_state)
-			on_disable();
+		if (state != m_state)
+		{
+			// The menu switches toggles from the render thread; the game is only touched from the game thread.
+			auto apply = [this, state] {
+				if (state)
+					on_enable();
+				else
+					on_disable();
+			};
+
+			async_run(std::move(apply));
+		}
 
 		m_state = state;
 

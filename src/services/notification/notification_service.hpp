@@ -1,55 +1,23 @@
 #pragma once
+#include <astra/host/notification.hpp>
+
 namespace big
 {
-	enum class NotificationType {
-		INFO,
-		SUCCESS,
-		PROTECTED,
-		WARNING,
-		DANGER,
-	};
-
-	struct notification
-	{
-		NotificationType type;
-		const std::string title;
-		const std::string message;
-		const std::chrono::time_point<std::chrono::system_clock> created_on;
-		const float destroy_in;
-		float alpha;
-	};
-
+	// Older call sites keep this name; every card now comes from the Astra queue, drawn by canvas::draw_notifications.
 	class notification_service final
 	{
-		std::unordered_map<std::size_t, notification> notifications;
-
 	public:
-		notification_service() = default;
-		virtual ~notification_service() = default;
+		void push(std::string title, std::string message) { notification::info(std::move(title), std::move(message)); }
+		void push_warning(std::string title, std::string message) { notification::warning(std::move(title), std::move(message)); }
+		void push_error(std::string title, std::string message) { notification::error(std::move(title), std::move(message)); }
 
-		void push(notification);
-		void push(std::string, std::string);
-		void push_warning(std::string, std::string);
-		void push_error(std::string, std::string);
+		void success(std::string title, std::string message) { notification::success(std::move(title), std::move(message)); }
+		void info(std::string title, std::string message) { notification::info(std::move(title), std::move(message)); }
+		void warning(std::string title, std::string message) { notification::warning(std::move(title), std::move(message)); }
+		void error(std::string title, std::string message) { notification::error(std::move(title), std::move(message)); }
 
-		void success(std::string, std::string);
-		void info(std::string, std::string);
-		void warning(std::string, std::string);
-		void error(std::string, std::string);
-
-		void protection(std::string);
-		void report(std::string);
-
-		std::vector<notification> get();
-
-		std::map<NotificationType, ImVec4> notification_colors = {
-			{NotificationType::INFO, ImVec4(0.29f, 0.34f, 0.69f, 1.00f)},
-			{NotificationType::PROTECTED, ImVec4(0.29f, 0.34f, 0.69f, 1.00f)},
-			{NotificationType::SUCCESS, ImVec4(0.29f, 0.69f, 0.34f, 1.00f)},
-			{NotificationType::WARNING, ImVec4(0.69f ,0.49f, 0.29f, 1.00f) },
-			{NotificationType::DANGER, ImVec4(0.69f, 0.29f , 0.29f, 1.00f)},
-		};
-
+		void protection(std::string message) { notification::protection(std::move(message)); }
+		void report(std::string message) { notification::report(std::move(message)); }
 	};
 
 	inline notification_service g_notification_service{};

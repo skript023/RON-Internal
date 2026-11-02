@@ -8,7 +8,8 @@
 #include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weak_object.hpp"
+#include "host_link.hpp"
 
 namespace big
 {
@@ -16,27 +17,36 @@ namespace big
 	{
 		using looped_command::looped_command;
 
+		// The pawn this feature last toggled, so a new pawn, such as in the next mission, gets god mode again but the
+		// same one is not toggled twice.
+		weak_object<SDK::APlayerCharacter> m_toggled;
+
 		void on_enable() override
 		{
-			auto controller = unreal_engine::get_player_controller();
-			auto c = unreal_engine::get_character();
-
-			if (c && controller)
-			{
-				misc::set_bit(c->bGodMode, 1);
-
-				if (controller->HasAuthority())
-					c->Server_ToggleGodMode();
-				else
-					c->ToggleGodMode();
-			}
+			m_toggled = {};
+			on_tick();
 		}
 
 		void on_tick() override
 		{
-			if (auto c = unreal_engine::get_character())
+			auto controller = unreal_engine::get_player_controller();
+			auto c = unreal_engine::get_character();
+
+			if (c && controller && !c->bGodMode)
 			{
-				misc::set_bit(c->bGodMode, 1);
+				if (m_toggled.get() != c)
+				{
+					if (controller->HasAuthority())
+						c->Server_ToggleGodMode();
+					else
+						c->ToggleGodMode();
+
+					m_toggled = c;
+				}
+
+				// The host decides damage, so its flag alone is enough even if the toggle did nothing.
+				if (!c->bGodMode && controller->HasAuthority())
+					c->bGodMode = 1;
 			}
 		}
 
@@ -44,20 +54,26 @@ namespace big
 		{
 			auto controller = unreal_engine::get_player_controller();
 			auto c = unreal_engine::get_character();
+			m_toggled = {};
 
-			if (c && controller)
+			if (c && controller && c->bGodMode)
 			{
-				if (misc::has_bit_set(c->bGodMode, 1))
-				{
-					misc::clear_bit(c->bGodMode, 1);
-				}
 				if (controller->HasAuthority())
 					c->Server_ToggleGodMode();
 				else
 					c->ToggleGodMode();
+
+				if (c->bGodMode && controller->HasAuthority())
+					c->bGodMode = 0;
 			}
 		}
 	};
 
-	static godmode _godmode("godmode", "Godmode", "");
+	static godmode _godmode("godmode", "Godmode", "You take no damage");
+
+	// The host decides damage, so for a client its flag on the client's pawn is enough.
+	static host_link::client_toggle _godmode_for_clients("godmode"_hash, [](SDK::APlayerCharacter* c, float) {
+		if (!c->bGodMode)
+			c->bGodMode = 1;
+	}, [](SDK::APlayerCharacter* c) { c->bGodMode = 0; });
 }

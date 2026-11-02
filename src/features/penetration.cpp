@@ -8,7 +8,7 @@
 #include "process_event/process_event.hpp"
 #include "SDK/ReadyOrNot_classes.hpp"
 #include "SDK/ReadyOrNot_parameters.hpp"
-
+#include "utility/weapon_backup.hpp"
 
 namespace big
 {
@@ -16,44 +16,57 @@ namespace big
 	{
 		float CPenetrationDistance;
 		UC::uint8 CPenetrationLevel;
-		float PenetrationDistance;
+		float RicochetChance;
 	};
 
-	static std::unordered_map<SDK::ABaseMagazineWeapon*, peneration> g_backup;
+	static weapon_backup<peneration> g_backup;
+
+	static float_command _penetration_mult("penetration_mult", "Penetration Multiplier",
+	    "How many times further than normal your bullets go through walls and doors", 1.f, 100.f, 100.f);
 
 	static void backup_weapon(SDK::ABaseMagazineWeapon* wep)
 	{
 		if (!wep) return;
 
 		// kalau belum pernah dibackup
-		if (g_backup.find(wep) == g_backup.end())
+		if (!g_backup.contains(wep))
 		{
-			g_backup[wep] = {
+			g_backup.add(wep, {
 				wep->CurrentAmmoType.PenetrationDistance,
 				wep->CurrentAmmoType.PenetrationLevel,
-				wep->PenetrationDistance
-			};
+				wep->CurrentAmmoType.RicochetChance
+			});
 		}
 	}
 
+	// The ammo's own penetration, from its backup, times the multiplier: a rifle's starts at 700, a pistol's at 100. The
+	// highest level goes through any armour, and no bullet glances off. The gun's own PenetrationDistance, 30 for a rifle
+	// and 20 for a pistol, is left alone: raised as well, bullets went up through floors but seldom hit anyone.
 	static void apply_peneration(SDK::ABaseMagazineWeapon* wep)
 	{
-		if (!wep) return;
+		for (auto& [weapon, original] : g_backup)
+		{
+			if (weapon.get() != wep)
+				continue;
 
-		wep->CurrentAmmoType.PenetrationDistance = 100000;
-		wep->CurrentAmmoType.PenetrationLevel = 10;
-		wep->PenetrationDistance = 10000; // Move this
+			const float mult = _penetration_mult.get_state();
+			wep->CurrentAmmoType.PenetrationDistance = original.CPenetrationDistance * mult;
+			wep->CurrentAmmoType.PenetrationLevel = 10;
+			wep->CurrentAmmoType.RicochetChance = 0.f;
+			return;
+		}
 	}
 
 	static void restore_all()
 	{
-		for (auto& [wep, data] : g_backup)
+		for (auto& [weapon, data] : g_backup)
 		{
+			auto wep = weapon.get();
 			if (!wep) continue;
 
 			wep->CurrentAmmoType.PenetrationDistance = data.CPenetrationDistance;
 			wep->CurrentAmmoType.PenetrationLevel = data.CPenetrationLevel;
-			wep->PenetrationDistance = data.CPenetrationDistance; // Move this
+			wep->CurrentAmmoType.RicochetChance = data.RicochetChance;
 		}
 
 		g_backup.clear();
@@ -80,6 +93,8 @@ namespace big
 			{
 				if (auto wep = c->GetEquippedWeapon())
 				{
+					// A weapon switched to while the feature is on is backed up before it changes too.
+					backup_weapon(wep);
 					apply_peneration(wep);
 				}
 			}
@@ -91,5 +106,5 @@ namespace big
 		}
 	};
 
-	static penetrate_wall _penetrate_wall("penetrate_wall", "Wall Peneration", "");
+	static penetrate_wall _penetrate_wall("penetrate_wall", "Wall Penetration", "Bullets go through walls and doors");
 }

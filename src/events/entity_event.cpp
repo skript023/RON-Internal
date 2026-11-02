@@ -254,7 +254,7 @@ namespace big
 						break;
 
 					const int seconds = static_cast<int>(bomb->TimeUntilExplodes);
-					add(esp_kind::trap, bomb, seconds > 0 ? std::format("Bomb {}:{:02}", seconds / 60, seconds % 60) : "Bomb", { 255, 40, 40, 255 });
+					add(esp_kind::trap, bomb, seconds > 0 ? std::format("Bomb {}:{:02}", seconds / 60, seconds % 60) : "Bomb", { 255, 0, 200, 255 });
 					break;
 				}
 				case level_kind::collectible:
